@@ -12,7 +12,7 @@ The app starts with an empty journal. Upload clips you have consent to use. The 
 
 - Add a clip by uploading a file, or record 8 seconds when this computer has a camera.
 - See the day as a thumbnail gallery: a 2×2 grid of four previews. Each preview is a frame labelled with the part of the day (Morning, Afternoon, or Evening) and the time. **Play** opens that clip. **Back** and **Next** move through further pages of four.
-- Ask a question in a text box, or upload a short voice question (Canary transcribes it when the speech model is up). Ask is connected to CoreWeave / W&B serverless inference at `https://api.inference.wandb.ai/v1`. The model is `meta-llama/Llama-3.1-8B-Instruct` unless `REMINISCE_LLM_MODEL` is set. The page shows `Connected to` that model when the reply came from it.
+- Ask a question in the large box at the top of **Ask**, or tap one of the suggested questions under it ("Where did I put my phone?", "Did I take my medicine?", and others) to search straight away. Ask is connected to CoreWeave / W&B serverless inference at `https://api.inference.wandb.ai/v1`. The model is `meta-llama/Llama-3.1-8B-Instruct` unless `REMINISCE_LLM_MODEL` is set. The page shows `Connected to` that model when the reply came from it.
 - Watch each step happen in plain words while Ask works ("Looking through your saved clips", "Making sure the answer matches the clip"), and while a new clip is added ("Cosmos is looking at the picture", then what Cosmos saw). The steps fold away when done, and the answer types itself out. `answer_question` and `ingest_video` report these steps through an optional `progress` callback.
 - Read a grounded answer that quotes the Cosmos description and names the `clip_id` (`Source: clip_id`).
 - Play the clip the answer came from.
@@ -255,12 +255,10 @@ Record it yourself, 5 to 30 seconds, mp4 or webm, under 25 MB. In **My day**, ta
 
 ## When something fails
 
-- `check_stack.py` exits 1: read the failing line. Cosmos and Embed must be `ok` before indexing. Canary can fail; typing a question still works.
+- `check_stack.py` exits 1: read the failing line. Cosmos and Embed must be `ok` before indexing. Canary can fail; the app does not use it.
 - Cosmos descriptions look generic: run `REMINISCE_DATA=data/practice .venv/bin/python scripts/index_clips.py --force` and read the one-line description printed for each clip. If a line says `fallback`, that clip did not get a Cosmos description.
 - Retrieval is under 8/10: the Eval table shows `embedding` and `hybrid` for each question. Hybrid is allowed to use the activity tags as a fallback. Say the real count in the demo.
 - VastDB did not mirror: the journal still works. `data/journal/vast_status.json` has a redacted reason. For a practice clip, re-run `scripts/index_clips.py --force` with `REMINISCE_DATA=data/practice` after VastDB is reachable.
-- Voice upload does nothing useful: Canary is optional. Type the question.
-
 ## Privacy
 
 The older adult owns the clips. Send is per clip. Take it back removes the carer from `shared_with` and writes that row to VastDB. The carer view and its daily note are not in the main row in this build. When used, the daily note only summarises clips already sent. There is no background recorder.

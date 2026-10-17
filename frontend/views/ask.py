@@ -19,22 +19,51 @@ from frontend.views.search import (
     show_journal,
 )
 from reminisce.agent import answer_question, clips_since
-from reminisce.media import MediaError, to_wav
-from reminisce.models import ChatModel, ModelError, embed_text, transcribe_wav
-from reminisce.settings import CLIPS_DIR, load_settings
+from reminisce.models import ChatModel, ModelError, embed_text
+from reminisce.settings import load_settings
 from reminisce.store import load_clips
 from reminisce.tracing import append_trace, safe_error, trace_from_answer
 from reminisce.vss_search import VssSearchError
 
 
+SUGGESTIONS = (
+    "Where did I put my phone?",
+    "Did I take my medicine?",
+    "Did I have lunch today?",
+    "When did I last go for a walk?",
+    "Who visited me today?",
+    "Did I lock the front door?",
+    "What did I do this afternoon?",
+)
+
+
+def _pick_suggestion() -> None:
+    picked = st.session_state.get("ask-suggestion")
+    if picked:
+        st.session_state["owner_question"] = picked
+        st.session_state["ask_pending"] = True
+    st.session_state["ask-suggestion"] = None
+
+
 def _page_ask(prefs: dict) -> None:
     st.markdown('<p class="greeting">Ask</p>', unsafe_allow_html=True)
     link = st.empty()
-    audio = st.file_uploader("Voice", type=["wav", "mp3", "m4a", "webm"])
-    if audio is not None and st.button("Use voice", icon=":material/mic:", width="stretch"):
-        _transcribe(audio)
-    question = st.text_input("Question", placeholder="did I have lunch today?", key="owner_question")
-    if st.button("Ask", key="ask-go", type="primary", icon=":material/chat_bubble:", width="stretch") and question.strip():
+    question = st.text_area(
+        "Question",
+        placeholder="Ask about your day, like “did I have lunch today?”",
+        key="owner_question",
+        height=130,
+        label_visibility="collapsed",
+    )
+    asked = st.button("Ask", key="ask-go", type="primary", icon=":material/search:", width="stretch")
+    st.pills(
+        "Try asking",
+        SUGGESTIONS,
+        key="ask-suggestion",
+        on_change=_pick_suggestion,
+        width="stretch",
+    )
+    if (asked or st.session_state.pop("ask_pending", False)) and question.strip():
         _run(question.strip(), prefs, top_k=PAGE)
     state = st.session_state.get("ask_state")
     if state:
@@ -211,19 +240,3 @@ def _show(state: dict, prefs: dict) -> None:
             answer=answer,
         )
         st.rerun()
-
-
-def _transcribe(audio) -> None:
-    folder = CLIPS_DIR / "uploads"
-    folder.mkdir(parents=True, exist_ok=True)
-    source = folder / "question-audio"
-    source.write_bytes(audio.getvalue())
-    wav = folder / "question.wav"
-    try:
-        to_wav(source, wav)
-        text = transcribe_wav(wav)
-    except (MediaError, ModelError) as exc:
-        st.info(f"Voice is unavailable. Type the question. ({safe_error(exc)})")
-        return
-    st.session_state["owner_question"] = text
-    st.rerun()
