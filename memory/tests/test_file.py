@@ -187,11 +187,12 @@ def test_page_flips_collapse_to_one_reading():
         _clip("read-4", 15, 20, "She turns a page."),
     ]
     filed = file_records(records)
-    assert filed["key"] == []
-    assert len(filed["general"]) == 1
-    entry = filed["general"][0]
+    assert filed["general"] == []
+    assert len(filed["key"]) == 1
+    entry = filed["key"][0]
     assert entry["statement"] == "You read Bluebirds."
-    assert entry["store"] == "general"
+    assert entry["store"] == "key"
+    assert entry["key_reason"] == "reading"
     assert entry["time_frame"]["start_sec"] == 0
     assert entry["time_frame"]["end_sec"] == 20
     assert entry["time_frame"]["source"] == "day.mp4"
@@ -200,6 +201,7 @@ def test_page_flips_collapse_to_one_reading():
 
 def test_one_page_turn_stays_one_moment():
     filed = file_records([_clip("page", 0, 5, "She flips a page.")])
+    assert filed["key"] == []
     assert len(filed["general"]) == 1
     assert filed["general"][0]["statement"] != "You read a book."
     assert filed["general"][0]["time_frame"]["end_sec"] == 5
@@ -214,11 +216,15 @@ def test_a_visitor_breaks_the_reading_run():
         _clip("read-4", 20, 25, "She flips a page."),
     ]
     filed = file_records(records)
-    assert [entry["statement"] for entry in filed["general"]] == [
+    assert filed["general"] == []
+    assert [entry["statement"] for entry in filed["key"]] == [
         "You read Bluebirds.",
+        'Sarah said "hello.".',
         "You read a book.",
     ]
-    assert filed["key"][0]["actors"] == ["Sarah"]
+    assert filed["key"][1]["actors"] == ["Sarah"]
+    assert filed["key"][0]["key_reason"] == "reading"
+    assert filed["key"][2]["key_reason"] == "reading"
 
 
 def test_kettle_resting_on_its_base_is_general():
@@ -290,9 +296,11 @@ def test_reading_run_collapses_across_segment_files():
         record["source"] = f"segment_{index}.mp4"
         records.append(record)
     filed = file_records(records)
-    assert len(filed["general"]) == 1
-    assert filed["general"][0]["statement"] == "You read Bluebirds."
-    assert filed["general"][0]["time_frame"]["end_sec"] == 15
+    assert filed["general"] == []
+    assert len(filed["key"]) == 1
+    assert filed["key"][0]["statement"] == "You read Bluebirds."
+    assert filed["key"][0]["key_reason"] == "reading"
+    assert filed["key"][0]["time_frame"]["end_sec"] == 15
 
 
 def test_model_failure_uses_the_text(tmp_path):

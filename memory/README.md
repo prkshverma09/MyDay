@@ -19,7 +19,7 @@ That writes:
 
 Each object uses `"store": "general"` or `"store": "key"`. `id`, `camera_id`, `location`, and `window` are copied from the pipeline record. `time_frame` and `video` keep the same span (`start_sec`, `end_sec`, camera, and the segment `source` when the record has one), so a text line can be checked against the clip. The model cannot change that. Pass `--rules` to file from the text without calling W&B.
 
-A run of ordinary reading windows (pick up a book, then turn pages) is written as one general memory, "You read [the book]", and `time_frame` covers the whole run. One page turn stays one window. `examples/home-windows.jsonl` is a few made-up home windows in the pipeline's format. The 100 archive records in `library/example-descriptions/` are format examples only. Do not file them.
+A run of reading windows (pick up a book, then turn pages) is one key memory, "You read [the book]", and `time_frame` covers the whole run. One page turn stays one general window. `examples/home-windows.jsonl` is a few made-up home windows in the pipeline's format. The 100 archive records in `library/example-descriptions/` are format examples only. Do not file them.
 
 ## Older caption draft
 

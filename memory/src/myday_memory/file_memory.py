@@ -17,6 +17,7 @@ KEY_REASONS = (
     "front door",
     "door locked",
     "unusual event",
+    "reading",
 )
 IMPORTANCE = {
     "visitor or conversation": 0.9,
@@ -25,6 +26,7 @@ IMPORTANCE = {
     "front door": 0.9,
     "door locked": 0.9,
     "unusual event": 0.95,
+    "reading": 0.7,
 }
 TRACKED = ("keys", "glasses", "hearing aid", "phone", "handbag")
 _APPLIANCE = re.compile(r"\b(stove|oven|microwave|kettle|hob|burner|ring)\b", re.IGNORECASE)
@@ -156,7 +158,7 @@ def _book_name(sentences: list[str]) -> str | None:
 
 
 def _collapse_reading(entries: list[dict]) -> list[dict]:
-    """A run of picking up a book and turning pages becomes one general memory."""
+    """A run of reading a book becomes one key memory. One page turn stays general."""
 
     collapsed: list[dict] = []
     group: list[dict] = []
@@ -165,8 +167,12 @@ def _collapse_reading(entries: list[dict]) -> list[dict]:
         if not group:
             return
         if len(group) == 1:
-            _drop_private(group[0])
-            collapsed.append(group[0])
+            entry = group[0]
+            sentences = list(entry.get("_sentences") or [])
+            _drop_private(entry)
+            if not _page_turn_only(sentences):
+                _mark_reading(entry)
+            collapsed.append(entry)
         else:
             collapsed.append(_merge_reading(group))
         group.clear()
@@ -213,15 +219,35 @@ def _merge_reading(group: list[dict]) -> dict:
         "location": first["location"],
         "window": {"start_sec": frame["start_sec"], "end_sec": frame["end_sec"]},
         "time_frame": frame,
-        "store": "general",
-        "key_reason": None,
+        "store": "key",
+        "key_reason": "reading",
         "statement": statement,
         "actors": [],
         "objects": _union_objects(group),
         "appointment": None,
-        "importance": 0.4,
+        "importance": IMPORTANCE["reading"],
     }
     return merged
+
+
+def _mark_reading(entry: dict) -> None:
+    entry["store"] = "key"
+    entry["key_reason"] = "reading"
+    entry["importance"] = IMPORTANCE["reading"]
+
+
+def _page_turn_only(sentences: list[str]) -> bool:
+    blob = " ".join(sentences)
+    turning = re.search(r"\b(page|pages)\b", blob, re.IGNORECASE) and re.search(
+        r"\b(flip|flips|flipped|turn|turns|turned)\b", blob, re.IGNORECASE
+    )
+    if not turning:
+        return False
+    if re.search(r"\b(read|reads|reading)\b", blob, re.IGNORECASE) and re.search(r"\bbook\b", blob, re.IGNORECASE):
+        return False
+    if re.search(r"\b(pick|picks|picked|open|opens)\b.{0,40}\bbook\b", blob, re.IGNORECASE):
+        return False
+    return _book_name(sentences) is None
 
 
 def _drop_private(entry: dict) -> None:

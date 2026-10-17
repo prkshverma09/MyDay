@@ -14,8 +14,9 @@ key: a moment that matters. Choose key when any of these are in the sentences:
 - Keys, glasses, a hearing aid, a phone, or a handbag is put down or picked up.
 - The front door is opened, locked, or unlocked, or Margaret leaves or returns home.
 - Something is wrong: a fall, a spill, something broken, distress, or an alert.
+- Margaret is reading a book. Turning one page, with no reading, stays general.
 
-When a routine event and a key event share the window, choose key and write the sentence about the key event. When unsure, choose key. An object that is merely visible is not a placement. An appliance that is merely visible, with no on or off, is general. Turning one page is general. A run of picking up a book and turning its pages is one ordinary memory, "You read [the book]", not a key moment and not one memory per page.
+When a routine event and a key event share the window, choose key and write the sentence about the key event. When unsure, choose key. An object that is merely visible is not a placement. An appliance that is merely visible, with no on or off, is general. A run of picking up a book and turning its pages is one key memory, "You read [the book]", not one memory per page.
 
 Write one short, calm, second-person sentence: "You made a cup of tea in the kitchen." If the actor is someone else, name them: "Sarah was at the front door."
 
@@ -23,6 +24,7 @@ Set importance from 0 to 1:
 - conversation or visitor: 0.8 to 1.0
 - appliance change or door event: 0.8 to 1.0
 - tracked object put down or picked up: 0.7 to 0.9
+- reading a book: 0.6 to 0.8
 - routine event: 0.2 to 0.5
 - walking between rooms: 0.1 to 0.2
 
@@ -33,6 +35,7 @@ key_reason is one of these strings, or null when the store is general:
 "front door"
 "door locked"
 "unusual event"
+"reading"
 Use the first matching reason in that list.
 
 appointment is null, or a short string when the words state an event and a time, such as "Dentist, Thursday 10am".
