@@ -22,10 +22,11 @@ _PLAYER = """
 <head>
   <meta charset="utf-8">
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
     html, body { height: 100%; margin: 0; }
     body {
-      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
-      color: #2b241c;
+      font-family: "Outfit", "Segoe UI", "Helvetica Neue", sans-serif;
+      color: #44341D;
       background: transparent;
     }
     main {
@@ -73,7 +74,7 @@ _PLAYER = """
       overflow: auto;
       margin: 0;
       padding: 12px 16px 16px;
-      font-size: 16px;
+      font-size: 18px;
       line-height: 1.45;
       white-space: pre-wrap;
     }

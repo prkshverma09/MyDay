@@ -4,7 +4,7 @@ from __future__ import annotations
 
 CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,650&family=Outfit:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
 
 html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"] {
   background:
@@ -13,6 +13,9 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"] {
   color: #44341D;
   font-family: "Outfit", "Segoe UI", "Helvetica Neue", sans-serif;
   font-size: 22px;
+}
+[data-testid="stApp"] *:not([data-testid="stIconMaterial"]) {
+  font-family: "Outfit", "Segoe UI", "Helvetica Neue", sans-serif !important;
 }
 header[data-testid="stHeader"] {
   background: #F9F0E9 !important;
@@ -58,9 +61,8 @@ h1 a { color: #44341D !important; text-decoration: none !important; }
   color: #44341D;
 }
 [data-testid="stMarkdownContainer"] p.greeting {
-  font-family: "Fraunces", Georgia, "Times New Roman", serif !important;
   font-size: 52px !important;
-  font-weight: 650 !important;
+  font-weight: 700 !important;
   letter-spacing: -0.03em !important;
   line-height: 1.25 !important;
   color: #44341D !important;
@@ -322,9 +324,8 @@ p.demo-head span { font-weight: 700; }
 }
 .story-card p { margin: 0; color: #44341D; }
 .story-card .story-date {
-  font-family: "Fraunces", Georgia, serif;
   font-size: 30px;
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: -0.02em;
 }
 .story-card .story-intro { margin: 0.2rem 0 1rem; font-size: 18px; opacity: 0.75; }
