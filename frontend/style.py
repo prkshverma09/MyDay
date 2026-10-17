@@ -280,6 +280,37 @@ button[data-testid^="stBaseButton-"]:disabled {
   color: #44341D !important;
 }
 p.demo-head span { font-weight: 700; }
+.st-key-demo-upload button {
+  min-height: 210px !important;
+  flex-direction: column !important;
+  gap: 0.6rem;
+  border-radius: 28px !important;
+  border: 1.5px dashed rgba(82, 115, 94, 0.45) !important;
+  background: rgba(253, 248, 245, 0.55) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 16px 36px rgba(68, 52, 29, 0.06) !important;
+  color: #44341D !important;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.st-key-demo-upload button:hover {
+  background: rgba(253, 248, 245, 0.8) !important;
+  transform: translateY(-1px);
+}
+.st-key-demo-upload button [data-testid="stIconMaterial"] {
+  font-size: 44px !important;
+  color: #52735E !important;
+}
+.st-key-demo-upload button [data-testid="stMarkdownContainer"] p {
+  margin: 0 !important;
+  font-size: 24px !important;
+  font-weight: 650;
+}
+.st-key-demo-upload button [data-testid="stMarkdownContainer"] p + p {
+  font-size: 17px !important;
+  font-weight: 400;
+  opacity: 0.65;
+}
 .story-card {
   margin-top: 0.6rem;
   padding: 1.4rem 1.5rem 1.1rem;

@@ -4,17 +4,18 @@ from __future__ import annotations
 
 import html
 import time
+from functools import lru_cache
 from datetime import datetime
 
 import streamlit as st
 
-from frontend.views.common import PREVIEW, _clip_detail, _first_upper, _greeting, _query_open, _thumb_slot
+from frontend.views.common import PREVIEW, _clip_detail, _first_upper, _frame_path, _greeting, _query_open, _thumb_slot
 from frontend.views.clip import demo_player
-from frontend.views.progress import NOTE, Steps
+from frontend.views.progress import NOTE, Steps, plural, replay
 from frontend.views.recorder import render_recorder
-from reminisce.demo import DEMO_VIDEO, demo_name, recorded_base
+from reminisce.demo import DEMO_VIDEO, demo_clips, demo_name, recorded_base
 from reminisce.ingest import ingest_video
-from reminisce.media import MediaError, normalize_upload
+from reminisce.media import MediaError, normalize_upload, probe_duration
 from reminisce.models import ModelError
 from reminisce.settings import CLIPS_DIR, MAX_CLIP_SECONDS, MIN_CLIP_SECONDS
 from reminisce.store import human_when, load_clips, next_clip_id
@@ -47,9 +48,19 @@ def _add_box(prefs: dict) -> None:
     if add and upload is not None:
         _accept_upload(upload, tag_list, prefs)
 
-def _demo_card() -> None:
+def _demo_card(prefs: dict) -> None:
     if not DEMO_VIDEO.is_file():
         return
+    if not st.session_state.get("demo_loaded"):
+        if st.button(
+            f"Upload demo clip\n\n{demo_name()} · {_clock_length()}",
+            key="demo-upload",
+            icon=":material/cloud_upload:",
+            width="stretch",
+        ):
+            _load_demo(prefs)
+        return
+    replay("Demo clip ready", st.session_state.get("demo_steps", []))
     when = _first_upper(human_when(recorded_base().isoformat()))
     st.markdown(
         f'<p class="demo-head"><span>{html.escape(demo_name())}</span> · {html.escape(when)}</p>'
@@ -59,9 +70,42 @@ def _demo_card() -> None:
     demo_player()
 
 
+@lru_cache(maxsize=1)
+def _clock_length() -> str:
+    try:
+        seconds = int(round(probe_duration(DEMO_VIDEO)))
+    except MediaError:
+        return "video"
+    return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def _load_demo(prefs: dict) -> None:
+    steps = Steps("Uploading the demo clip")
+    try:
+        steps.start(f"Loading {demo_name()}")
+        length = _clock_length()
+        steps.done(f"Loaded {demo_name()}, {length} long")
+        steps.start("Reading what Cosmos saw, 10 seconds at a time")
+        moments = demo_clips(prefs["owner_id"])
+        steps.done(f"Read {plural(len(moments), 'moment')}")
+        steps.start("Making the preview")
+        if moments:
+            _frame_path(moments[0])
+        steps.done("Preview ready. Ask can search this clip")
+    except (MediaError, ModelError, OSError) as exc:
+        steps.finish("The demo clip could not be loaded", ok=False)
+        st.error(safe_error(exc))
+        return
+    steps.finish("Demo clip ready")
+    st.session_state["demo_steps"] = steps.lines
+    st.session_state["demo_loaded"] = True
+    time.sleep(0.4)
+    st.rerun()
+
+
 def _page_day(prefs: dict) -> None:
     st.markdown(f'<p class="greeting">{html.escape(_greeting())}</p>', unsafe_allow_html=True)
-    _demo_card()
+    _demo_card(prefs)
     clips = [clip for clip in load_clips() if clip.owner_id == prefs["owner_id"]]
     adding = bool(st.session_state.get("adding"))
     if st.button(
