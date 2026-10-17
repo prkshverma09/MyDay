@@ -9,6 +9,7 @@ import hashlib
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -24,6 +25,7 @@ TOP_K = 5
 # Hybrid scores on the team archive sit around 0.13 to 0.30, so 0.3 discards real matches.
 MIN_SIMILARITY = 0.15
 SEGMENT_CACHE = CLIPS_DIR / "vss"
+THUMB_CACHE = SEGMENT_CACHE / "thumbs"
 MAX_SEGMENT_BYTES = 40 * 1024 * 1024
 FILTER_FIELDS = ("location", "camera_id", "capture_type", "object_classes")
 TIME_WINDOWS = ("all", "1h", "24h", "7d", "30d")
@@ -429,6 +431,35 @@ def parse_query(text: str, options: dict[str, list[str]] | None = None) -> tuple
             break
     cleaned = " ".join(remaining.split()).strip(" ,.?!")
     return (cleaned or " ".join((text or "").split())), filters
+
+
+def segment_thumbnail(source: str) -> Path | None:
+    """One still from a returned segment, cached beside the downloaded segment."""
+    from reminisce.media import MediaError, extract_frame
+
+    target = THUMB_CACHE / (hashlib.sha1((source or "").encode()).hexdigest()[:20] + ".jpg")
+    if target.is_file() and target.stat().st_size > 0:
+        return target
+    video = fetch_segment(source)
+    if video is None:
+        return None
+    try:
+        extract_frame(video, target)
+    except MediaError:
+        return None
+    return target if target.is_file() else None
+
+
+def segment_thumbnails(sources: list[str], *, workers: int = 4) -> dict[str, Path | None]:
+    unique = list(dict.fromkeys(source for source in sources if source))
+    if not unique:
+        return {}
+    try:
+        _login()
+    except VssSearchError:
+        return {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return dict(zip(unique, pool.map(segment_thumbnail, unique)))
 
 
 def fetch_segment(source: str) -> Path | None:

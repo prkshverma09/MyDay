@@ -1,18 +1,20 @@
-"""Ask page: a grounded answer first, then more matching clips and the camera archive."""
+"""Ask page: a conversation. Each reply shows its steps, a grounded answer, and small picture results."""
 
 from __future__ import annotations
 
+import html
 import time
 
 import streamlit as st
 
-from frontend.views.common import _paint_connection, _show_answer
-from frontend.views.progress import NOTE, Steps, plural, replay
+from frontend.views.common import _paint_connection, _where_from
+from frontend.views.progress import NOTE, Steps, plural, replay, type_out
 from frontend.views.search import (
     MAX_RESULTS,
     PAGE,
     archive_search,
     build_filters,
+    clip_row,
     filter_parts,
     journal_matches,
     show_archive,
@@ -23,7 +25,7 @@ from reminisce.models import ChatModel, ModelError, embed_text
 from reminisce.settings import load_settings
 from reminisce.store import load_clips
 from reminisce.tracing import append_trace, safe_error, trace_from_answer
-from reminisce.vss_search import VssSearchError
+from reminisce.vss_search import VssSearchError, segment_thumbnails
 
 
 SUGGESTIONS = (
@@ -40,35 +42,89 @@ SUGGESTIONS = (
 def _pick_suggestion() -> None:
     picked = st.session_state.get("ask-suggestion")
     if picked:
-        st.session_state["owner_question"] = picked
-        st.session_state["ask_pending"] = True
+        st.session_state["ask_pending"] = picked
     st.session_state["ask-suggestion"] = None
 
 
 def _page_ask(prefs: dict) -> None:
     st.markdown('<p class="greeting">Ask</p>', unsafe_allow_html=True)
     link = st.empty()
-    question = st.text_area(
-        "Question",
-        placeholder="Ask about your day, like “did I have lunch today?”",
-        key="owner_question",
-        height=130,
-        label_visibility="collapsed",
-    )
-    asked = st.button("Ask", key="ask-go", type="primary", icon=":material/search:", width="stretch")
-    st.pills(
-        "Try asking",
-        SUGGESTIONS,
-        key="ask-suggestion",
-        on_change=_pick_suggestion,
-        width="stretch",
-    )
-    if (asked or st.session_state.pop("ask_pending", False)) and question.strip():
-        _run(question.strip(), prefs, top_k=PAGE)
-    state = st.session_state.get("ask_state")
-    if state:
-        _show(state, prefs)
+    chat: list[dict] = st.session_state.setdefault("ask_chat", [])
+    # st.chat_input is pinned to the bottom wherever it is called, so read it before drawing.
+    typed = st.chat_input("Ask about your day…", key="ask-input")
+    question = (typed or st.session_state.pop("ask_pending", "") or "").strip()
+    for index, turn in enumerate(chat):
+        _show_turn(index, turn, prefs)
+    # Always claim this slot, so the welcome is wiped at once instead of fading out while a reply runs.
+    welcome = st.empty()
+    if not chat and not question:
+        with welcome.container(), st.chat_message("assistant"):
+            st.markdown(
+                '<p class="answer-line">Hello. Ask me about your day, and I will find the clip.</p>',
+                unsafe_allow_html=True,
+            )
+            st.pills("Try asking", SUGGESTIONS, key="ask-suggestion", on_change=_pick_suggestion, width="stretch")
+    if question:
+        _ask_turn(question, prefs, chat)
+    elif chat and st.button("Start again", key="ask-clear", icon=":material/refresh:", type="tertiary"):
+        st.session_state["ask_chat"] = []
+        st.session_state["search_open"] = ""
+        st.rerun()
     _paint_connection(link)
+
+
+def _question_bubble(question: str) -> None:
+    with st.chat_message("user"):
+        st.markdown(f'<p class="chat-question">{html.escape(question)}</p>', unsafe_allow_html=True)
+
+
+def _ask_turn(question: str, prefs: dict, chat: list[dict]) -> None:
+    st.session_state["search_open"] = ""
+    _question_bubble(question)
+    with st.chat_message("assistant"):
+        turn = _run(question, prefs, top_k=PAGE)
+        if turn is None:
+            return
+        chat.append(turn)
+        _show_reply(len(chat) - 1, turn, prefs, stream=True)
+
+
+def _show_turn(index: int, turn: dict, prefs: dict) -> None:
+    _question_bubble(turn["question"])
+    with st.chat_message("assistant"):
+        replay(turn.get("steps_label") or "How I found this", turn.get("steps") or [])
+        _show_reply(index, turn, prefs, stream=False)
+
+
+def _show_reply(index: int, turn: dict, prefs: dict, *, stream: bool) -> None:
+    answer = turn["answer"]
+    if not answer.grounded:
+        st.error("This answer was withheld because it was not tied to a real clip.")
+    else:
+        if answer.citations:
+            st.markdown(f'<p class="llm-line">{html.escape(_where_from(answer))}</p>', unsafe_allow_html=True)
+        if stream:
+            type_out(st.empty(), answer.text)
+        else:
+            st.markdown(f'<p class="answer-line">{html.escape(answer.text)}</p>', unsafe_allow_html=True)
+        for clip in answer.clips:
+            clip_row(clip, prefs, turn=index, section="answer", description=False)
+    skip = set(answer.citations)
+    show_journal(turn["journal"], turn["filters"], prefs, skip=skip, turn=index)
+    chat = st.session_state.get("ask_chat") or []
+    wants_more = show_archive(
+        turn["result"],
+        turn["filters"],
+        skip=skip,
+        top_k=turn["top_k"],
+        latency=turn["latency"],
+        thumbs=turn.get("thumbs") or {},
+        turn=index,
+        allow_more=index == len(chat) - 1,
+    )
+    if wants_more:
+        chat[index] = _run(turn["question"], prefs, top_k=min(MAX_RESULTS, turn["top_k"] + PAGE), previous=turn)
+        st.rerun()
 
 
 def _agent_progress(steps: Steps):
@@ -118,17 +174,24 @@ def _agent_progress(steps: Steps):
     return on_event
 
 
-def _run(question: str, prefs: dict, *, top_k: int, answer=None) -> None:
+def _thumbs(result, skip: set[str]) -> dict[str, str]:
+    if result is None:
+        return {}
+    sources = [moment.source for moment in result.moments if moment.citation_id not in skip]
+    return {source: str(path) for source, path in segment_thumbnails(sources).items() if path is not None}
+
+
+def _run(question: str, prefs: dict, *, top_k: int, previous: dict | None = None) -> dict | None:
     settings = load_settings()
     words, filters = build_filters(question)
     started = time.perf_counter()
-    fresh = answer is None
-    previous = st.session_state.get("ask_state") or {}
-    if not fresh:
+    if previous is not None:
+        answer = previous["answer"]
         with st.spinner("Looking for more…"):
             result, note = archive_search(words, filters, top_k=top_k)
-        journal = previous.get("journal", [])
-        steps_label, step_lines = previous.get("steps_label", ""), previous.get("steps", [])
+            thumbs = _thumbs(result, set(answer.citations))
+        journal = previous["journal"]
+        steps_label, step_lines = previous["steps_label"], previous["steps"]
     else:
         steps = Steps("Looking for that moment")
         steps.start("Reading your question")
@@ -172,31 +235,22 @@ def _run(question: str, prefs: dict, *, top_k: int, answer=None) -> None:
         except (ModelError, RuntimeError) as exc:
             steps.finish("Something went wrong", ok=False)
             st.error(safe_error(exc))
-            return
+            return None
         trace_from_answer("answer", question, answer, time.perf_counter() - started)
         journal = journal_matches(words, clips, vector, filters, prefs["owner_id"])
         others = len([hit for hit in journal if hit.clip.clip_id not in set(answer.citations)])
         if others:
             steps.done(f"{plural(others, 'other saved clip')} also {'matches' if others == 1 else 'match'}")
+        thumbs = {}
+        if result is not None and result.moments:
+            steps.start("Getting a picture of each video")
+            thumbs = _thumbs(result, set(answer.citations))
+            steps.done("Pictures ready" if thumbs else "No pictures, so only the words are shown")
         outcome = "Found it" if answer.citations else "Could not find that moment"
         steps_label = f"{outcome} · {time.perf_counter() - started:.1f} s"
         steps.finish(steps_label)
         step_lines = steps.lines
     latency = time.perf_counter() - started
-    st.session_state["ask_state"] = {
-        "question": question,
-        "words": words,
-        "filters": filters,
-        "answer": answer,
-        "journal": journal,
-        "result": result,
-        "top_k": top_k,
-        "latency": latency,
-        "steps": step_lines,
-        "steps_label": steps_label,
-        "fresh": fresh,
-    }
-    st.session_state["search_open"] = ""
     moments = [moment.citation_id for moment in (result.moments if result else [])]
     append_trace(
         {
@@ -215,28 +269,16 @@ def _run(question: str, prefs: dict, *, top_k: int, answer=None) -> None:
             "latency_s": round(latency, 3),
         }
     )
-
-
-def _show(state: dict, prefs: dict) -> None:
-    fresh = state.pop("fresh", False)
-    if not fresh:
-        replay(state.get("steps_label") or "How I found this", state.get("steps") or [])
-    answer = state["answer"]
-    _show_answer(answer, prefs, role="owner", stream=fresh)
-    skip = set(answer.citations)
-    show_journal(state["journal"], state["filters"], prefs, skip=skip)
-    wants_more = show_archive(
-        state["result"],
-        state["filters"],
-        skip=skip,
-        top_k=state["top_k"],
-        latency=state["latency"],
-    )
-    if wants_more:
-        _run(
-            state["question"],
-            prefs,
-            top_k=min(MAX_RESULTS, state["top_k"] + PAGE),
-            answer=answer,
-        )
-        st.rerun()
+    return {
+        "question": question,
+        "words": words,
+        "filters": filters,
+        "answer": answer,
+        "journal": journal,
+        "result": result,
+        "thumbs": thumbs,
+        "top_k": top_k,
+        "latency": latency,
+        "steps": step_lines,
+        "steps_label": steps_label,
+    }
