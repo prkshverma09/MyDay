@@ -1,12 +1,8 @@
-"""Reminisce entry point."""
+"""Previous entry point. The UI lives in frontend/app.py."""
 
 from __future__ import annotations
 
-import sys
+import runpy
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from reminisce.ui import main
-
-main()
+runpy.run_path(str(Path(__file__).resolve().parent / "frontend" / "app.py"), run_name="__main__")

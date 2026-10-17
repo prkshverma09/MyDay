@@ -10,5 +10,6 @@ data/clips/*.mp4
 data/clips/*.jpg
 data/clips/frames/
 data/clips/uploads/
+data/clips/vss/
 data/clips/manifest.json
 data/questions.json

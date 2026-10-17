@@ -27,10 +27,10 @@ No passive camera. No facial recognition. No medical advice. No safety-alarm fra
 
 ## How an answer stays tied to a real clip
 
-1. `search_day` embeds the question with Cosmos Embed1 and ranks clip descriptions. Activity tags break close calls. A weak match is dropped instead of guessed.
-2. The W&B model may only pick `clip_id`s from that short list. Two prompts are compared in the eval: `strict` and `warm`. The app uses `warm`.
-3. The sentence on screen is the Cosmos description plus `Source: clip_id`. The model's free text is kept in the trace and the eval file. It is not shown as the memory.
-4. If the model names an id that is not a real clip, that id is dropped. If it names nothing usable, the top retrieved clip is cited instead. If nothing was retrieved, the answer is "I couldn't find that moment in your day." and it cites nothing.
+1. Ask logs in to the video search API and calls `POST /api/v1/search` with the question, `top_k` 3, and `min_similarity` 0.3. The JWT stays in memory. A hit that names a journal `clip_id` is played from that clip. If the search returns nothing that matches the journal, Ask falls back to the local cosine rank (`search_day`): Cosmos Embed1 plus activity tags. Practice clips live in VastDB schema `reminisce`, table `clips`, so this fallback is the usual path for them. The trace field `retrieval_path` is `vss` or `journal`.
+2. The W&B model may only pick ids from that short list. Two prompts are compared in the eval: `strict` and `warm`. The app uses `warm`. The eval script still ranks the journal directly so those counts stay about the embeddings.
+3. The sentence on screen is the description plus `Source:` and the id. That id is the journal `clip_id` when the hit matches one, otherwise the segment or source id returned by search. The model's free text is kept in the trace and the eval file. It is not shown as the memory.
+4. If the model names an id that was not retrieved, that id is dropped. If it names nothing usable, the top retrieved clip is cited instead. If nothing was retrieved, the answer is "I couldn't find that moment in your day." and it cites nothing.
 5. `get_clip` loads the row again before the sentence is built. `daily_digest` includes only clips whose `shared_with` contains the carer.
 
 ## Architecture
@@ -42,7 +42,8 @@ flowchart LR
   cosmos --> embed[Cosmos Embed1]
   embed --> journal[Local journal]
   embed --> vast[VAST reminisce.clips]
-  journal --> agent[search_day get_clip daily_digest]
+  search[Video search API] --> agent[vss_search or search_day]
+  journal --> agent
   agent --> ui[Streamlit]
   agent --> trace[Trace log and W and B]
 ```
@@ -52,8 +53,8 @@ flowchart LR
 | Capture | Upload, or an 8 second camera recording. Practice clips are 6 second title cards. |
 | Understanding | Cosmos Reason describes one frame from the clip. |
 | Index | A 256-number Embed1 vector of that description, stored on the clip row in VastDB schema `reminisce`, table `clips`. |
-| Agent | W&B serverless inference selects clip ids. The tools are `search_day`, `get_clip`, and `daily_digest`. |
-| UI | Streamlit. 2×2 thumbnail gallery, ask, story, carer share, eval. |
+| Agent | Video search first, then the local journal rank. W&B serverless inference selects ids from that list. The tools are `vss_search`, `search_day`, `get_clip`, and `daily_digest`. |
+| UI | Streamlit, under `frontend/`. 2×2 thumbnail gallery, ask, story, carer share, eval. |
 | Observability | `data/journal/traces.jsonl` for every ask, story, and digest. `scripts/run_eval.py` writes `data/journal/eval_latest.json` and a W&B table. |
 
 Ask posts to `https://api.inference.wandb.ai/v1`. The chat model defaults to `meta-llama/Llama-3.1-8B-Instruct`. Override it with `REMINISCE_LLM_MODEL`. Cosmos Reason, Cosmos Embed1, and Canary are reached through `COSMOS3_REASON_URL`, `COSMOS_EMBED1_URL`, and `CANARY_1B_URL`. The model id for Cosmos and Embed is read from each server's `/v1/models`.
@@ -87,21 +88,24 @@ VastDB keeps every write. The newest `inserted_at` for a `clip_id` is the curren
 ## Repository
 
 ```text
-app.py                     Streamlit entry
+frontend/app.py            Streamlit entry
+frontend/style.py          Blank Street palette
+frontend/views/            My day, Ask, Story, Carer, Eval
+app.py                     Same entry, for the previous command
 reminisce/catalog.py       Ten questions and the practice-clip labels
 reminisce/media.py         ffmpeg: title cards, frames, upload, camera
 reminisce/models.py        Cosmos, Embed1, Canary, W&B chat
 reminisce/ingest.py        One clip in, one row out
 reminisce/vast_index.py    reminisce.clips in this team's bucket
 reminisce/vectors.py       Cosine rank and tag fallback
-reminisce/agent.py         search_day, get_clip, daily_digest, story
+reminisce/vss_search.py    Login and POST /api/v1/search
+reminisce/agent.py         vss_search, search_day, get_clip, daily_digest, story
 reminisce/evaluate.py      Ten-question comparison of two prompts
-reminisce/ui.py            Thumbnail gallery, ask, story, carer, eval
 scripts/check_stack.py     Probe the services, print no secrets
 scripts/make_sample_clips.py
 scripts/index_clips.py
 scripts/run_eval.py
-tests/test_reminisce.py    Grounding and share rules, no network
+tests/test_reminisce.py    Grounding, search fallback, and share rules, no network
 ```
 
 The labelled questions:
@@ -186,7 +190,7 @@ Run the ten questions twice, once for each prompt, and log the table to W&B:
 Start the app. Leave this command running.
 
 ```bash
-.venv/bin/streamlit run app.py
+.venv/bin/streamlit run frontend/app.py
 ```
 
 Open `http://127.0.0.1:8501`.
