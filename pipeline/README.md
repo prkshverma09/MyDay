@@ -2,11 +2,13 @@
 
 Perception only. A later LLM reads `llm_input`. This pipeline never calls that LLM.
 
-## Why 5-second windows
+## Chunks, same as video-chunker
 
-Cosmos Reason keeps the most useful detail on a 5-second clip. Thirty seconds is the longest window that still ingests new frames. Sixty seconds saturates (about the same prompt tokens as 30 seconds) and the model invents the second half. A one-minute video is twelve windows, not one 60-second call.
+A stream is a sequence of equal chunks. With `--chunk 10`, the file is cut at 0–10s, 10–20s, 20–30s, and so on. The last piece keeps whatever time remains. Those bounds come from `video_chunker.plan.plan_segments`, the same planner `video-chunker` uses.
 
-Each window is transcoded to 640px wide, 4 fps, no audio, H.264 CRF 28 before inference. On that input, Cosmos is about 1–3 seconds and ~2400 prompt tokens. YOLO11 is about 0.4–1.0 seconds over the 20 frames.
+Each chunk is described as soon as it is cut. Cosmos and YOLO run together on that piece, one JSONL line is written, then the next chunk starts. A one-minute video at 10 seconds is six records, not one call on the whole minute.
+
+Before inference the chunk is scaled to 640px wide, 4 fps, no audio, H.264 CRF 28. Cosmos still sees the whole chunk. Thirty seconds is the longest chunk that still adds new visual tokens. A 60 second chunk saturates and the model invents the second half, so keep the stream at 10–30 seconds.
 
 ## What runs
 
@@ -14,7 +16,8 @@ For every window, Cosmos Reason and YOLO11 run at the same time. Their results a
 
 - `cosmos.sentences` — up to five short relational sentences (actor, action, object, where it is relative to something else)
 - `yolo.objects` — class, hit count, max confidence, coarse position (`left`/`center`/`right` and `near`/`far`)
-- `llm_input` — a compact plain-text block: time window, Cosmos sentences, YOLO objects with positions
+- `chunk` — index, start, end, and duration, matching the video-chunker manifest
+- `llm_input` — a compact plain-text block: chunk time, Cosmos sentences, YOLO objects with positions
 
 One-frame absurd YOLO labels (`toilet`, `airplane`, `train`) are dropped when confidence is below 0.5, the hit count is 1, or every hit sits in a single frame. Dropped labels are listed under `yolo.ignored` and are left out of `llm_input`.
 
@@ -30,11 +33,12 @@ Requires `ffmpeg` and the packages in `requirements.txt`. Auth and endpoints com
 | `COSMOS_MODEL` | Optional. Otherwise the id from `GET /v1/models` |
 
 ```bash
-python pipeline/video_to_text.py path/to/video.mp4 -o descriptions.jsonl
-python pipeline/video_to_text.py path/to/video.mp4 --window 5 --camera-id door --location kitchen
+python pipeline/video_to_text.py path/to/video.mp4 --chunk 10 -o descriptions.jsonl
+python pipeline/video_to_text.py path/to/video.mp4 --chunk 10 --camera-id door --location kitchen
+python pipeline/video_to_text.py --manifest chunks/day.chunks.json -o descriptions.jsonl
 ```
 
-Omit `-o` to write JSONL to stdout. `--window` defaults to 5 seconds.
+`--chunk` defaults to 10 seconds. `--window` is an alias. Omit `-o` to write JSONL to stdout. `--manifest` describes chunk files already written by `video-chunker`, in index order, and uses the times stored in that manifest.
 
 ## Next stage
 

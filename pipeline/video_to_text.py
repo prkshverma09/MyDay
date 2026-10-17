@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Turn a video into a JSONL payload for a later LLM.
+"""Turn a video into a JSONL payload for a later LLM, one chunk at a time.
 
-Cosmos Reason and YOLO11 are the perception step. This program does not call
-a summarizer. Each record's ``llm_input`` is the text the next stage should read.
+Cuts follow video-chunker: a 10 second chunk length yields 0–10, then 10–20,
+and so on. Cosmos Reason and YOLO11 run on that chunk as soon as it is cut.
+This program does not call a summarizer. Each record's ``llm_input`` is the
+text the next stage should read.
 """
 
 from __future__ import annotations
@@ -16,13 +18,20 @@ import sys
 import tempfile
 import time
 from collections import defaultdict
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
 
+_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_ROOT / "video-chunker" / "src"))
+from video_chunker.plan import plan_segments  # noqa: E402
+from video_chunker.probe import probe_media  # noqa: E402
+
 DEFAULT_COSMOS_URL = "http://166.19.38.112:8001"
 DEFAULT_YOLO_URL = "http://166.19.38.112:8002"
+DEFAULT_CHUNK_S = 10.0
 FFMPEG = "/usr/bin/ffmpeg" if Path("/usr/bin/ffmpeg").is_file() else "ffmpeg"
 FFPROBE = "/usr/bin/ffprobe" if Path("/usr/bin/ffprobe").is_file() else "ffprobe"
 
@@ -78,37 +87,21 @@ def cosmos_model() -> str:
     return _MODEL_CACHE
 
 
-def probe_duration(path: str) -> float:
-    result = subprocess.run(
-        [
-            FFPROBE,
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=nokey=1:noprint_wrappers=1",
-            path,
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
+def chunk_plan(video_path: str, chunk_s: float):
+    """Same non-overlapping cuts as video-chunker: one chunk every ``chunk_s`` seconds."""
+    if chunk_s <= 0:
+        raise SystemExit("chunk length must be > 0 seconds")
+    info = probe_media(Path(video_path), ffprobe_bin=FFPROBE)
+    segments = plan_segments(
+        info.duration_s,
+        chunk_s,
+        min_tail_s=1.0 / info.frame_rate,
     )
-    return float(result.stdout.strip())
-
-
-def iter_windows(duration: float, window: float):
-    start = 0.0
-    while start < duration - 0.05:
-        end = min(duration, start + window)
-        if end - start < 0.4:
-            break
-        yield start, end
-        start += window
+    return info, segments
 
 
 def transcode_window(src: str, start: float, length: float, dest: str) -> None:
-    """640px wide, 4 fps, no audio. This is the measured Cosmos detail window."""
+    """640px wide, 4 fps, no audio, for one chunk."""
     cmd = [
         FFMPEG,
         "-y",
@@ -354,9 +347,15 @@ def build_llm_input(
     camera_id: str = "",
     location: str = "",
 ) -> str:
-    lines = [
-        f"Time window: {_fmt_sec(window['start_sec'])}-{_fmt_sec(window['end_sec'])}s",
-    ]
+    chunk_index = window.get("index")
+    if chunk_index is None:
+        span = f"Time window: {_fmt_sec(window['start_sec'])}-{_fmt_sec(window['end_sec'])}s"
+    else:
+        span = (
+            f"Chunk {int(chunk_index)}: "
+            f"{_fmt_sec(window['start_sec'])}-{_fmt_sec(window['end_sec'])}s"
+        )
+    lines = [span]
     if camera_id:
         lines.append(f"Camera: {camera_id}")
     if location:
@@ -388,71 +387,150 @@ def make_record(
     cosmos: dict,
     yolo: dict,
 ) -> dict:
+    start = round(float(window["start_sec"]), 2)
+    end = round(float(window["end_sec"]), 2)
+    chunk = {
+        "index": int(window["index"]),
+        "start_sec": start,
+        "end_sec": end,
+        "duration_sec": round(end - start, 2),
+    }
     return {
         "id": ann_id,
         "source": source,
         "camera_id": camera_id,
         "location": location,
-        "window": {
-            "start_sec": round(float(window["start_sec"]), 2),
-            "end_sec": round(float(window["end_sec"]), 2),
-        },
+        "chunk": chunk,
+        "window": {"start_sec": start, "end_sec": end},
         "cosmos": cosmos,
         "yolo": yolo,
-        "llm_input": build_llm_input(window, cosmos, yolo, camera_id, location),
+        "llm_input": build_llm_input(
+            {**window, "index": chunk["index"]}, cosmos, yolo, camera_id, location
+        ),
     }
 
 
-def describe_file(
+def _proxy_and_perceive(src: str, start: float, length: float, dest: str) -> tuple[dict, dict]:
+    transcode_window(src, start, length, dest)
+    return perceive(dest)
+
+
+def iter_chunk_records(
     video_path: str,
     *,
-    window_s: float = 5.0,
+    chunk_s: float = DEFAULT_CHUNK_S,
     source: str = "",
     camera_id: str = "",
     location: str = "",
     id_start: int = 1,
-) -> list[dict]:
-    duration = probe_duration(video_path)
-    records = []
+) -> Iterator[dict]:
+    """Cut one chunk, describe it, then move to the next chunk.
+
+    A 10 second chunk length means 0–10, then 10–20, and so on. Cosmos and YOLO
+    see that whole chunk. Nothing is held back for a later summary.
+    """
+    _info, segments = chunk_plan(video_path, chunk_s)
     with tempfile.TemporaryDirectory(prefix="v2t-") as tmp:
-        for index, (start, end) in enumerate(iter_windows(duration, window_s)):
-            dest = str(Path(tmp) / f"window_{index:03d}.mp4")
-            transcode_window(video_path, start, end - start, dest)
-            cosmos, yolo = perceive(dest)
-            window = {"start_sec": start, "end_sec": end}
-            records.append(
-                make_record(
-                    ann_id=f"ann_{id_start + index:04d}",
-                    source=source or video_path,
-                    camera_id=camera_id,
-                    location=location,
-                    window=window,
-                    cosmos=cosmos,
-                    yolo=yolo,
-                )
+        for offset, segment in enumerate(segments):
+            dest = str(Path(tmp) / f"chunk_{segment.index:04d}.mp4")
+            cosmos, yolo = _proxy_and_perceive(
+                video_path, segment.start_s, segment.duration_s, dest
             )
-    return records
+            yield make_record(
+                ann_id=f"ann_{id_start + offset:04d}",
+                source=source or video_path,
+                camera_id=camera_id,
+                location=location,
+                window={
+                    "index": segment.index,
+                    "start_sec": segment.start_s,
+                    "end_sec": segment.end_s,
+                },
+                cosmos=cosmos,
+                yolo=yolo,
+            )
+
+
+def iter_manifest_records(
+    manifest_path: str,
+    *,
+    camera_id: str = "",
+    location: str = "",
+    id_start: int = 1,
+) -> Iterator[dict]:
+    """Describe chunks already written by video-chunker, in index order."""
+    payload = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    source = str(payload.get("source") or manifest_path)
+    chunks = sorted(payload.get("chunks") or [], key=lambda item: int(item["index"]))
+    with tempfile.TemporaryDirectory(prefix="v2t-") as tmp:
+        for offset, chunk in enumerate(chunks):
+            path = Path(chunk["path"])
+            if not path.is_file():
+                raise SystemExit(f"missing chunk file {path}")
+            dest = str(Path(tmp) / f"chunk_{int(chunk['index']):04d}.mp4")
+            cosmos, yolo = _proxy_and_perceive(
+                str(path), 0.0, float(chunk["end_s"]) - float(chunk["start_s"]), dest
+            )
+            yield make_record(
+                ann_id=f"ann_{id_start + offset:04d}",
+                source=source,
+                camera_id=camera_id,
+                location=location,
+                window={
+                    "index": int(chunk["index"]),
+                    "start_sec": float(chunk["start_s"]),
+                    "end_sec": float(chunk["end_s"]),
+                },
+                cosmos=cosmos,
+                yolo=yolo,
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Video to structured text for a later LLM")
-    parser.add_argument("video", help="Local video file")
-    parser.add_argument("--window", type=float, default=5.0, help="Window length in seconds")
+    parser = argparse.ArgumentParser(description="Video chunks to structured text for a later LLM")
+    parser.add_argument("video", nargs="?", help="Local video file")
+    parser.add_argument(
+        "--chunk",
+        type=float,
+        default=DEFAULT_CHUNK_S,
+        help="Chunk length in seconds. 10 means a 10s clip every 10s (default 10)",
+    )
+    parser.add_argument(
+        "--window",
+        type=float,
+        default=None,
+        help="Alias for --chunk",
+    )
+    parser.add_argument(
+        "--manifest",
+        help="video-chunker manifest (.chunks.json). Describes those chunk files in order",
+    )
     parser.add_argument("-o", "--output", help="JSONL path (default stdout)")
     parser.add_argument("--source", default="", help="Source URI stored on each record")
     parser.add_argument("--camera-id", default="")
     parser.add_argument("--location", default="")
     parser.add_argument("--id-start", type=int, default=1)
     args = parser.parse_args(argv)
+    chunk_s = args.window if args.window is not None else args.chunk
 
-    records = describe_file(
-        args.video,
-        window_s=args.window,
-        source=args.source,
-        camera_id=args.camera_id,
-        location=args.location,
-        id_start=args.id_start,
-    )
+    if args.manifest:
+        records = iter_manifest_records(
+            args.manifest,
+            camera_id=args.camera_id,
+            location=args.location,
+            id_start=args.id_start,
+        )
+    else:
+        if not args.video:
+            parser.error("pass a video file or --manifest")
+        records = iter_chunk_records(
+            args.video,
+            chunk_s=chunk_s,
+            source=args.source,
+            camera_id=args.camera_id,
+            location=args.location,
+            id_start=args.id_start,
+        )
     handle = open(args.output, "w", encoding="utf-8") if args.output else sys.stdout
     try:
         for record in records:
