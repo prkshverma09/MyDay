@@ -11,11 +11,13 @@ PYTHONPATH=src python -m myday_memory.cli file examples/home-windows.jsonl -o me
 
 That writes:
 
+- `general_memory.txt` — routine memories a person or an agent reads: one line each, a timestamp and the sentence
+- `key_moments.txt` — the key memories in that same text form
 - `general-memory.jsonl` — routine moments, one JSON object per window
 - `key-memory.jsonl` — visitors, appliance on/off, objects put down or picked up, the front door (including locking and unlocking), and anything unusual
 - `last-seen.json` — the latest place a tracked object was put down, taken from the key file
 
-Each object uses `"store": "general"` or `"store": "key"`. `id`, `camera_id`, `location`, and `window` are copied from the pipeline record. `time_frame` is the same span in the video (`start_sec`, `end_sec`, plus `source` and chunk index when the pipeline record has them), so a moment can be played back. The model cannot change it. Pass `--rules` to file from the text without calling W&B.
+Each object uses `"store": "general"` or `"store": "key"`. `id`, `camera_id`, `location`, and `window` are copied from the pipeline record. `time_frame` and `video` keep the same span (`start_sec`, `end_sec`, camera, and the segment `source` when the record has one), so a text line can be checked against the clip. The model cannot change that. Pass `--rules` to file from the text without calling W&B.
 
 A run of ordinary reading windows (pick up a book, then turn pages) is written as one general memory, "You read [the book]", and `time_frame` covers the whole run. One page turn stays one window. `examples/home-windows.jsonl` is a few made-up home windows in the pipeline's format. The 100 archive records in `library/example-descriptions/` are format examples only. Do not file them.
 

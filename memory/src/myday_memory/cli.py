@@ -34,22 +34,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "file":
-        filed = file_records(
-            load_records(args.records),
-            llm=None if args.rules else WandbMemoryModel(),
-        )
+        model = None if args.rules else WandbMemoryModel()
+        filed = file_records(load_records(args.records), llm=model)
         write_stores(filed, args.out)
-        json.dump(
-            {
-                "general": len(filed["general"]),
-                "key": len(filed["key"]),
-                "last_seen": len(filed["last_seen"]),
-                "out": str(args.out),
-            },
-            sys.stdout,
-            indent=2,
-        )
-        sys.stdout.write("\n")
+        general = (args.out / "general_memory.txt").read_text(encoding="utf-8")
+        key = (args.out / "key_moments.txt").read_text(encoding="utf-8")
+        sys.stdout.write(general)
+        if general and key:
+            sys.stdout.write("\n")
+        sys.stdout.write(key)
         return 0
 
     chunks = load_chunks(args.chunks)
