@@ -1,0 +1,149 @@
+{
+  "days": [
+    {
+      "day": "2026-10-17",
+      "clip_count": 10,
+      "places": [
+        "kitchen",
+        "hallway",
+        "front door",
+        "living room",
+        "garden"
+      ],
+      "cameras": [
+        "pov",
+        "kitchen"
+      ],
+      "span_start": "2026-10-17T08:02:00",
+      "span_end": "2026-10-17T18:20:15",
+      "intervals": [
+        {
+          "clip_id": "tea-0802",
+          "camera": "pov",
+          "place": "kitchen",
+          "t_start": "2026-10-17T08:02:00",
+          "t_end": "2026-10-17T08:02:15",
+          "file": "tea.mp4"
+        },
+        {
+          "clip_id": "keys-0815",
+          "camera": "pov",
+          "place": "hallway",
+          "t_start": "2026-10-17T08:15:00",
+          "t_end": "2026-10-17T08:15:15",
+          "file": "keys.mp4"
+        },
+        {
+          "clip_id": "sarah-0905",
+          "camera": "pov",
+          "place": "front door",
+          "t_start": "2026-10-17T09:05:00",
+          "t_end": "2026-10-17T09:05:20",
+          "file": "sarah.mp4"
+        },
+        {
+          "clip_id": "cat-0920",
+          "camera": "kitchen",
+          "place": "kitchen",
+          "t_start": "2026-10-17T09:20:00",
+          "t_end": "2026-10-17T09:20:15",
+          "file": "cat.mp4"
+        },
+        {
+          "clip_id": "glasses-1040",
+          "camera": "pov",
+          "place": "kitchen",
+          "t_start": "2026-10-17T10:40:00",
+          "t_end": "2026-10-17T10:40:15",
+          "file": "glasses.mp4"
+        },
+        {
+          "clip_id": "stove-on-1205",
+          "camera": "pov",
+          "place": "kitchen",
+          "t_start": "2026-10-17T12:05:00",
+          "t_end": "2026-10-17T12:05:10",
+          "file": "stove.mp4"
+        },
+        {
+          "clip_id": "stove-off-1207",
+          "camera": "pov",
+          "place": "kitchen",
+          "t_start": "2026-10-17T12:07:00",
+          "t_end": "2026-10-17T12:07:10",
+          "file": "stove.mp4"
+        },
+        {
+          "clip_id": "plant-1315",
+          "camera": "pov",
+          "place": "living room",
+          "t_start": "2026-10-17T13:15:00",
+          "t_end": "2026-10-17T13:15:15",
+          "file": "plant.mp4"
+        },
+        {
+          "clip_id": "garden-1545",
+          "camera": "pov",
+          "place": "garden",
+          "t_start": "2026-10-17T15:45:00",
+          "t_end": "2026-10-17T15:45:15",
+          "file": "garden.mp4"
+        },
+        {
+          "clip_id": "evening-1820",
+          "camera": "pov",
+          "place": "living room",
+          "t_start": "2026-10-17T18:20:00",
+          "t_end": "2026-10-17T18:20:15",
+          "file": "evening.mp4"
+        }
+      ],
+      "questions": {
+        "people": {
+          "recorded": true,
+          "clip_ids": [
+            "sarah-0905",
+            "evening-1820"
+          ],
+          "names": [
+            "Sarah"
+          ]
+        },
+        "lost_objects": {
+          "recorded": true,
+          "clip_ids": [
+            "keys-0815",
+            "glasses-1040"
+          ],
+          "objects": [
+            "keys",
+            "glasses"
+          ]
+        },
+        "door_lock": {
+          "recorded": false,
+          "clip_ids": []
+        },
+        "stove": {
+          "recorded": true,
+          "clip_ids": [
+            "stove-on-1205",
+            "stove-off-1207"
+          ],
+          "state": "off",
+          "text": "The stove is off in the kitchen."
+        },
+        "appointment": {
+          "recorded": true,
+          "clip_ids": [
+            "sarah-0905"
+          ],
+          "text": "Dentist on Thursday, 10am, Sarah driving."
+        }
+      },
+      "unrecorded": [
+        "door_lock"
+      ]
+    }
+  ]
+}

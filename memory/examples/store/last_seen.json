@@ -1,0 +1,28 @@
+{
+  "objects": [
+    {
+      "object": "cat",
+      "place": "living room",
+      "detail": "sofa",
+      "prep": "on",
+      "clip_id": "living-0940",
+      "t_start": "2026-10-17T09:40:00",
+      "t_end": "2026-10-17T09:40:20",
+      "camera": "living",
+      "statement": "The cat is on the sofa.",
+      "file": "living_0002.mp4"
+    },
+    {
+      "object": "keys",
+      "place": "kitchen",
+      "detail": "blue bowl",
+      "prep": "in",
+      "clip_id": "kitchen-0912",
+      "t_start": "2026-10-17T09:12:00",
+      "t_end": "2026-10-17T09:12:20",
+      "camera": "kitchen",
+      "statement": "The keys are in the blue bowl.",
+      "file": "kitchen_0004.mp4"
+    }
+  ]
+}

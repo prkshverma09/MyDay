@@ -1,0 +1,52 @@
+{
+  "objects": [
+    {
+      "object": "cat",
+      "place": "kitchen",
+      "detail": "kitchen",
+      "prep": "in",
+      "clip_id": "cat-0920",
+      "t_start": "2026-10-17T09:20:00",
+      "t_end": "2026-10-17T09:20:15",
+      "camera": "kitchen",
+      "statement": "The cat is in the kitchen.",
+      "file": "cat.mp4"
+    },
+    {
+      "object": "glasses",
+      "place": "kitchen",
+      "detail": "counter",
+      "prep": "on",
+      "clip_id": "glasses-1040",
+      "t_start": "2026-10-17T10:40:00",
+      "t_end": "2026-10-17T10:40:15",
+      "camera": "pov",
+      "statement": "The glasses are on the counter.",
+      "file": "glasses.mp4"
+    },
+    {
+      "object": "keys",
+      "place": "hallway",
+      "detail": "blue ceramic bowl",
+      "prep": "in",
+      "clip_id": "keys-0815",
+      "t_start": "2026-10-17T08:15:00",
+      "t_end": "2026-10-17T08:15:15",
+      "camera": "pov",
+      "statement": "The keys are in the blue ceramic bowl.",
+      "file": "keys.mp4"
+    },
+    {
+      "object": "mug",
+      "place": "kitchen",
+      "detail": "counter",
+      "prep": "on",
+      "clip_id": "tea-0802",
+      "t_start": "2026-10-17T08:02:00",
+      "t_end": "2026-10-17T08:02:15",
+      "camera": "pov",
+      "statement": "The mug is on the counter.",
+      "file": "tea.mp4"
+    }
+  ]
+}
