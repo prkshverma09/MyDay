@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import html
+import time
+from datetime import datetime
 
 import streamlit as st
 
 from frontend.views.common import PREVIEW, _clip_detail, _greeting, _query_open, _thumb_slot
-from reminisce.catalog import SAMPLE_IDS
-from reminisce.ingest import ingest_video, now_iso
+from frontend.views.progress import NOTE, Steps
+from reminisce.ingest import ingest_video
 from reminisce.media import MediaError, normalize_upload, record_camera
 from reminisce.models import ModelError
 from reminisce.settings import CLIPS_DIR, MAX_CLIP_SECONDS, MIN_CLIP_SECONDS
@@ -61,8 +63,6 @@ def _page_day(prefs: dict) -> None:
     if not clips:
         st.info("No clips yet.")
         return
-    if any(clip.clip_id in SAMPLE_IDS for clip in clips):
-        st.markdown('<p class="quiet-note">Practice clips.</p>', unsafe_allow_html=True)
     chosen = _query_open()
     if chosen:
         st.session_state["open_clip"] = chosen
@@ -116,44 +116,93 @@ def _accept_upload(upload, tags: list[str], prefs: dict) -> None:
     raw_dir.mkdir(parents=True, exist_ok=True)
     source = raw_dir / f"raw-{upload.name}"
     source.write_bytes(upload.getvalue())
-    clip_id = next_clip_id(load_clips())
+    when = datetime.now().astimezone()
+    clip_id = next_clip_id(load_clips(), when)
     dest = raw_dir / f"{clip_id}.mp4"
+    steps = Steps("Adding your clip")
     try:
-        with st.spinner("Saving…"):
-            normalize_upload(source, dest)
-            ingest_video(
-                dest,
-                clip_id=clip_id,
-                owner_id=prefs["owner_id"],
-                recorded_at=now_iso(),
-                tags=tags,
-            )
+        steps.start("Preparing the video")
+        normalize_upload(source, dest)
+        steps.done("Video ready")
+        _ingest(steps, dest, clip_id, when, tags, prefs)
     except (MediaError, ModelError, RuntimeError) as exc:
+        steps.finish("The clip could not be added", ok=False)
         st.error(safe_error(exc))
         return
-    st.session_state["note"] = "Saved."
-    st.rerun()
+    _saved(steps)
 
 def _record(tags: list[str], prefs: dict) -> None:
-    clip_id = next_clip_id(load_clips())
+    when = datetime.now().astimezone()
+    clip_id = next_clip_id(load_clips(), when)
     dest = CLIPS_DIR / "uploads" / f"{clip_id}.mp4"
+    steps = Steps("Recording a clip")
     try:
-        with st.spinner("Recording…"):
-            recorded = record_camera(dest, seconds=8)
+        steps.start("Recording 8 seconds")
+        recorded = record_camera(dest, seconds=8)
         if recorded is None:
+            steps.finish("No camera found", ok=False)
             st.info("No camera. Add a clip instead.")
             return
-        with st.spinner("Saving…"):
-            ingest_video(
-                recorded,
-                clip_id=clip_id,
-                owner_id=prefs["owner_id"],
-                recorded_at=now_iso(),
-                tags=tags,
-            )
+        steps.done("Recorded 8 seconds")
+        _ingest(steps, recorded, clip_id, when, tags, prefs)
     except (MediaError, ModelError, RuntimeError) as exc:
+        steps.finish("The clip could not be added", ok=False)
         st.error(safe_error(exc))
         return
+    _saved(steps)
+
+def _ingest(steps: Steps, video, clip_id: str, when: datetime, tags: list[str], prefs: dict) -> None:
+    ingest_video(
+        video,
+        clip_id=clip_id,
+        owner_id=prefs["owner_id"],
+        recorded_at=when.isoformat(timespec="seconds"),
+        tags=tags,
+        progress=_ingest_progress(steps),
+    )
+
+def _ingest_progress(steps: Steps):
+    """Turn ingest events into plain words about what happens to the video."""
+
+    def on_event(event: str, **info) -> None:
+        if event == "measuring":
+            steps.start("Checking how long the clip is")
+        elif event == "measured":
+            steps.done(f"The clip is {round(info.get('seconds', 0))} seconds long")
+        elif event == "frame":
+            steps.start("Taking a still picture from the clip")
+        elif event == "framed":
+            steps.done("Picture taken")
+        elif event == "describing":
+            steps.start("Cosmos is looking at the picture")
+        elif event == "described":
+            if info.get("source") == "cosmos":
+                words = " ".join(str(info.get("description", "")).split())
+                short = words if len(words) <= 140 else words[:137].rstrip() + "…"
+                steps.done(f"Cosmos sees: “{short}”")
+            else:
+                steps.done("Cosmos did not answer, so your words describe this clip", icon=NOTE)
+        elif event == "embedding":
+            steps.start("Making the clip easy to find when you ask")
+        elif event == "embedded":
+            steps.done("Ready to be found")
+        elif event == "saving":
+            steps.start("Saving it to your day")
+        elif event == "saved":
+            steps.done("Saved on this computer")
+        elif event == "mirroring":
+            steps.start("Keeping a copy in the team database")
+        elif event == "mirrored":
+            if info.get("ok"):
+                steps.done("Copy kept in the team database")
+            else:
+                steps.done("The team copy did not update. Your clip is still saved here", icon=NOTE)
+
+    return on_event
+
+def _saved(steps: Steps) -> None:
+    steps.finish("Added to your day")
+    time.sleep(1.2)
     st.session_state["note"] = "Saved."
     st.rerun()
 

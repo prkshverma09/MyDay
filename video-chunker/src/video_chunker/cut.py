@@ -83,6 +83,23 @@ def build_ffmpeg_command(
     return cmd
 
 
+def drop_extra_frame_tail(paths, segment_count, frame_rate, ffprobe_bin):
+    """Drop one unplanned file when it is only a frame or two long.
+
+    The segment muxer can emit that extra file when the encoded length runs
+    a little past the cut, which happens with Safari camera recordings. The
+    picture is already in the previous file. A real remainder is its own
+    planned segment and is kept.
+    """
+    if len(paths) != segment_count + 1:
+        return paths
+    tail = paths[-1]
+    if probe_media(tail, ffprobe_bin=ffprobe_bin).duration_s > duration_tolerance_s(frame_rate):
+        return paths
+    tail.unlink()
+    return paths[:-1]
+
+
 def _assign_times(paths, segments, mode, ffprobe_bin, frame_rate):
     records = []
     cursor = 0.0
@@ -149,6 +166,12 @@ def chunk_video(
         detail = result.stderr.strip() or "ffmpeg failed"
         raise CutFailed(detail)
     paths = existing_chunk_paths(output_dir, source)
+    paths = drop_extra_frame_tail(
+        paths,
+        len(segments),
+        info.frame_rate,
+        ffprobe_bin,
+    )
     if mode == MODE_EXACT and len(paths) != len(segments):
         raise CutFailed(f"expected {len(segments)} chunks, found {len(paths)}")
     if not paths:

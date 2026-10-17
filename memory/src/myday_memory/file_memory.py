@@ -17,6 +17,7 @@ KEY_REASONS = (
     "front door",
     "door locked",
     "unusual event",
+    "reading",
 )
 IMPORTANCE = {
     "visitor or conversation": 0.9,
@@ -25,10 +26,22 @@ IMPORTANCE = {
     "front door": 0.9,
     "door locked": 0.9,
     "unusual event": 0.95,
+    "reading": 0.7,
 }
 TRACKED = ("keys", "glasses", "hearing aid", "phone", "handbag")
 _APPLIANCE = re.compile(r"\b(stove|oven|microwave|kettle|hob|burner|ring)\b", re.IGNORECASE)
-_ON_OFF = re.compile(r"\b(on|off|lit)\b", re.IGNORECASE)
+_APPLIANCE_STATE = re.compile(
+    r"\b(?:turn(?:s|ed|ing)?|switch(?:es|ed|ing)?|click(?:s|ed|ing)?|"
+    r"left|stays|remains|comes|goes|going|shuts|shut)\s+(?:on|off|lit)\b"
+    r"|\b(?:is|was|are|were|been|still|left)\s+(?:still\s+)?(?:on|off|lit)\b",
+    re.IGNORECASE,
+)
+_NEW_FACT = re.compile(
+    r"\b(locked|unlocks|unlocked|unlocking|unlock|front door|"
+    r"falls|fell|fallen|spill|spilled|dentist|doctor|optician|"
+    r"hospital|appointment|broken|crying|collapsed|visitor)\b",
+    re.IGNORECASE,
+)
 _PLACE_VERB = re.compile(
     r"\b(put|puts|set|sets|drop|drops|dropped|pick|picks|picked|left|hang|hangs|hung)\b",
     re.IGNORECASE,
@@ -57,7 +70,7 @@ _WHEN = re.compile(
 _WHAT = re.compile(r"\b(dentist|doctor|optician|hospital|appointment|gp)\b", re.IGNORECASE)
 _NAME = re.compile(r"(?<!\w)([A-Z][a-z]{2,})(?![\w'])")
 _SKIP_NAMES = {
-    "the", "this", "that", "there", "then", "she", "her", "his", "and", "but",
+    "the", "this", "that", "there", "then", "she", "her", "his", "you", "and", "but",
     "margaret", "mum", "mom", "kitchen", "hallway", "living", "room", "front",
     "door", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
     "sunday", "january", "february", "march", "april", "june", "july", "august",
@@ -105,7 +118,12 @@ def file_records(records: list[dict], llm=None) -> dict[str, list[dict]]:
     ordered = _collapse_reading(ordered)
     general = [entry for entry in ordered if entry["store"] != "key"]
     key = [entry for entry in ordered if entry["store"] == "key"]
-    return {"general": general, "key": key, "last_seen": last_seen_from(key)}
+    return {
+        "general": general,
+        "key": key,
+        "last_seen": last_seen_from(key),
+        "entries": ordered,
+    }
 
 
 def _is_reading(sentences: list[str]) -> bool:
@@ -140,7 +158,7 @@ def _book_name(sentences: list[str]) -> str | None:
 
 
 def _collapse_reading(entries: list[dict]) -> list[dict]:
-    """A run of picking up a book and turning pages becomes one general memory."""
+    """A run of reading a book becomes one key memory. One page turn stays general."""
 
     collapsed: list[dict] = []
     group: list[dict] = []
@@ -149,8 +167,12 @@ def _collapse_reading(entries: list[dict]) -> list[dict]:
         if not group:
             return
         if len(group) == 1:
-            _drop_private(group[0])
-            collapsed.append(group[0])
+            entry = group[0]
+            sentences = list(entry.get("_sentences") or [])
+            _drop_private(entry)
+            if not _page_turn_only(sentences):
+                _mark_reading(entry)
+            collapsed.append(entry)
         else:
             collapsed.append(_merge_reading(group))
         group.clear()
@@ -175,7 +197,9 @@ def _same_reading_scene(group: list[dict], entry: dict) -> bool:
     previous = group[-1]
     if previous.get("location") != entry.get("location"):
         return False
-    return previous.get("time_frame", {}).get("source") == entry.get("time_frame", {}).get("source")
+    previous_end = float(previous.get("time_frame", {}).get("end_sec", 0))
+    start = float(entry.get("time_frame", {}).get("start_sec", 0))
+    return -0.05 <= start - previous_end <= 1.0
 
 
 def _merge_reading(group: list[dict]) -> dict:
@@ -195,15 +219,35 @@ def _merge_reading(group: list[dict]) -> dict:
         "location": first["location"],
         "window": {"start_sec": frame["start_sec"], "end_sec": frame["end_sec"]},
         "time_frame": frame,
-        "store": "general",
-        "key_reason": None,
+        "store": "key",
+        "key_reason": "reading",
         "statement": statement,
         "actors": [],
         "objects": _union_objects(group),
         "appointment": None,
-        "importance": 0.4,
+        "importance": IMPORTANCE["reading"],
     }
     return merged
+
+
+def _mark_reading(entry: dict) -> None:
+    entry["store"] = "key"
+    entry["key_reason"] = "reading"
+    entry["importance"] = IMPORTANCE["reading"]
+
+
+def _page_turn_only(sentences: list[str]) -> bool:
+    blob = " ".join(sentences)
+    turning = re.search(r"\b(page|pages)\b", blob, re.IGNORECASE) and re.search(
+        r"\b(flip|flips|flipped|turn|turns|turned)\b", blob, re.IGNORECASE
+    )
+    if not turning:
+        return False
+    if re.search(r"\b(read|reads|reading)\b", blob, re.IGNORECASE) and re.search(r"\bbook\b", blob, re.IGNORECASE):
+        return False
+    if re.search(r"\b(pick|picks|picked|open|opens)\b.{0,40}\bbook\b", blob, re.IGNORECASE):
+        return False
+    return _book_name(sentences) is None
 
 
 def _drop_private(entry: dict) -> None:
@@ -250,14 +294,67 @@ def last_seen_from(key_entries: list[dict]) -> list[dict]:
     return [latest[label] for label in sorted(latest)]
 
 
+_MEMORY_LINE = re.compile(r"^(\d+):(\d{2})–(\d+):(\d{2})  (.*)$")
+
+
+def memory_line(entry: dict) -> str:
+    """The one line a person or an agent reads for this memory."""
+
+    frame = entry.get("time_frame") or entry.get("window") or {}
+    start = _stamp(float(frame.get("start_sec") or 0))
+    end = _stamp(float(frame.get("end_sec") or 0))
+    sentence = str(entry.get("statement") or "").strip()
+    return f"{start}–{end}  {sentence}".rstrip()
+
+
+def render_memory(entries: list[dict]) -> str:
+    """Plain memory file: one timestamp and sentence per line."""
+
+    lines = [memory_line(entry) for entry in entries if memory_line(entry)]
+    if not lines:
+        return ""
+    return "\n".join(lines) + "\n"
+
+
+def read_memory(path: Path) -> list[dict]:
+    """Read a memory file back. Each row has the line, the span, and the sentence."""
+
+    rows = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        match = _MEMORY_LINE.match(line)
+        if not match:
+            continue
+        start = int(match.group(1)) * 60 + int(match.group(2))
+        end = int(match.group(3)) * 60 + int(match.group(4))
+        rows.append(
+            {
+                "text": line,
+                "start_sec": start,
+                "end_sec": end,
+                "statement": match.group(5),
+            }
+        )
+    return rows
+
+
+def _stamp(seconds: float) -> str:
+    total = int(round(seconds))
+    return f"{total // 60}:{total % 60:02d}"
+
+
 def write_stores(filed: dict[str, list[dict]], directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
-    _write_jsonl(directory / "general-memory.jsonl", filed["general"])
-    _write_jsonl(directory / "key-memory.jsonl", filed["key"])
+    _write_jsonl(directory / "general-memory.jsonl", [_with_text(entry) for entry in filed["general"]])
+    _write_jsonl(directory / "key-memory.jsonl", [_with_text(entry) for entry in filed["key"]])
     (directory / "last-seen.json").write_text(
         json.dumps({"objects": filed["last_seen"]}, indent=2) + "\n",
         encoding="utf-8",
     )
+    (directory / "general_memory.txt").write_text(render_memory(filed["general"]), encoding="utf-8")
+    (directory / "key_moments.txt").write_text(render_memory(filed["key"]), encoding="utf-8")
 
 
 def load_records(path: Path) -> list[dict]:
@@ -305,9 +402,7 @@ def _apply_wording(entry: dict, proposed: dict, parsed: LlmInput) -> None:
     words = _content_words(source)
     statement = str(proposed.get("statement") or "").strip()
     statement_words = _content_words(statement)
-    if statement_words and statement_words <= words:
-        entry["statement"] = statement
-    elif statement_words and statement_words <= words | _content_words(entry["statement"]):
+    if _statement_supported(statement, statement_words, source, words, entry["statement"]):
         entry["statement"] = statement
     actors = []
     for actor in proposed.get("actors") or []:
@@ -354,7 +449,35 @@ def _key_reason(sentences: list[str]) -> str | None:
 
 
 def _appliance(sentence: str) -> bool:
-    return _APPLIANCE.search(sentence) is not None and _ON_OFF.search(sentence) is not None
+    return _APPLIANCE.search(sentence) is not None and _APPLIANCE_STATE.search(sentence) is not None
+
+
+def _statement_supported(
+    statement: str,
+    statement_words: set[str],
+    source: str,
+    words: set[str],
+    rules_statement: str,
+) -> bool:
+    """Keep a model sentence that stays on this window. A paraphrase may add ordinary words."""
+
+    if not statement or not statement_words:
+        return False
+    source_text = source.lower()
+    for match in _NEW_FACT.finditer(statement):
+        if match.group(1).lower() not in source_text:
+            return False
+    for name in _NAME.findall(statement):
+        if name.lower() in _SKIP_NAMES:
+            continue
+        if name.lower() not in source_text:
+            return False
+    if _APPLIANCE.search(statement) and _APPLIANCE_STATE.search(statement):
+        if not (_APPLIANCE.search(source) and _APPLIANCE_STATE.search(source)):
+            return False
+    if statement_words <= words or statement_words <= words | _content_words(rules_statement):
+        return True
+    return bool(statement_words & words)
 
 
 def _placement(sentence: str) -> bool:
@@ -392,8 +515,27 @@ def _other_names(sentences: list[str]) -> list[str]:
         for name in _NAME.findall(visible):
             if name.lower() in _SKIP_NAMES or name in found:
                 continue
+            if _sentence_starts_with(visible, name) and not _person_context(sentence):
+                continue
             found.append(name)
     return found
+
+
+def _sentence_starts_with(sentence: str, name: str) -> bool:
+    stripped = sentence.strip().lstrip("\"“'")
+    return stripped.startswith(name) and (
+        len(stripped) == len(name) or not stripped[len(name)].isalnum()
+    )
+
+
+def _person_context(sentence: str) -> bool:
+    if _SPEECH.search(sentence) or _QUOTE.search(sentence):
+        return True
+    return re.search(
+        r"\b(on the step|at the door|in the doorway|a visitor|someone else)\b",
+        sentence,
+        re.IGNORECASE,
+    ) is not None
 
 
 def _speech_quotes(sentences: list[str]) -> list[str]:
@@ -555,6 +697,28 @@ def _as_you(sentence: str) -> str:
 def _content_words(text: str) -> set[str]:
     stop = {"the", "and", "was", "were", "with", "that", "this", "your", "you", "her", "his", "she"}
     return {word for word in re.findall(r"[a-z0-9']{4,}", text.lower()) if word not in stop}
+
+
+def _video(entry: dict) -> dict:
+    frame = entry.get("time_frame") or entry.get("window") or {}
+    video = {
+        "camera_id": entry.get("camera_id") or "",
+        "start_sec": frame.get("start_sec"),
+        "end_sec": frame.get("end_sec"),
+    }
+    if frame.get("source"):
+        video["source"] = frame["source"]
+    if frame.get("chunk") is not None:
+        video["chunk"] = frame["chunk"]
+    return video
+
+
+def _with_text(entry: dict) -> dict:
+    stored = {"text": memory_line(entry), "video": _video(entry)}
+    stored.update(entry)
+    stored["text"] = memory_line(entry)
+    stored["video"] = _video(entry)
+    return stored
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:

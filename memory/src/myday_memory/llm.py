@@ -7,7 +7,7 @@ import urllib.request
 
 from myday_memory.models import ChunkText
 
-DEFAULT_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
+DEFAULT_MODEL = "meta-llama/Llama-3.3-70B-Instruct"
 INFERENCE_URL = "https://api.inference.wandb.ai/v1/chat/completions"
 
 SYSTEM_PROMPT = """You structure one home-video clip into a memory entry for someone with early memory loss.

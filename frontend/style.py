@@ -62,9 +62,9 @@ h1 a { color: #44341D !important; text-decoration: none !important; }
   font-size: 52px !important;
   font-weight: 650 !important;
   letter-spacing: -0.03em !important;
-  line-height: 1.12 !important;
+  line-height: 1.25 !important;
   color: #44341D !important;
-  margin: 0.7rem 0 0.2rem !important;
+  margin: 0.7rem 0 0.9rem !important;
 }
 [data-testid="stMarkdownContainer"] p.day-part {
   margin: 1.2rem 0 0.1rem !important;
@@ -171,6 +171,29 @@ button[data-testid^="stBaseButton-"]:disabled {
   border: 1.5px solid rgba(255, 255, 255, 0.8);
   font-size: 22px !important;
 }
+[class*="st-key-owner_question"] textarea {
+  min-height: 130px;
+  border-radius: 24px;
+  background: rgba(253, 248, 245, 0.9);
+  color: #44341D;
+  border: 1.5px solid rgba(228, 213, 196, 0.95);
+  font-size: 26px !important;
+  line-height: 1.4 !important;
+  padding: 1rem 1.2rem !important;
+}
+[class*="st-key-ask-suggestion"] button {
+  min-height: 48px !important;
+  border-radius: 999px !important;
+  background: rgba(253, 248, 245, 0.72) !important;
+  border: 1.5px solid rgba(228, 213, 196, 0.95) !important;
+  color: #44341D !important;
+  font-size: 19px !important;
+  padding: 0.3rem 1rem !important;
+}
+[class*="st-key-ask-suggestion"] button:hover {
+  background: #ECE0D4 !important;
+  border-color: #52735E !important;
+}
 [data-testid="stCaptionContainer"] p {
   color: #44341D !important;
   font-size: 20px !important;
@@ -257,6 +280,24 @@ button[data-testid^="stBaseButton-"]:disabled {
   min-height: 56px !important;
   width: 100% !important;
   font-size: 22px !important;
+}
+[data-testid="stExpander"] details {
+  background: rgba(253, 248, 245, 0.72) !important;
+  border: 1px solid rgba(255, 255, 255, 0.85) !important;
+  border-radius: 20px !important;
+}
+[data-testid="stExpander"] summary p {
+  color: #44341D !important;
+  font-size: 20px !important;
+  font-weight: 600 !important;
+}
+[data-testid="stExpander"] [data-testid="stMarkdownContainer"] p {
+  font-size: 20px !important;
+  line-height: 1.45 !important;
+  margin: 0.1rem 0 !important;
+}
+[data-testid="stExpander"] [data-testid="stIconMaterial"] {
+  color: #52735E !important;
 }
 [data-testid="stMetricValue"],
 [data-testid="stMetricLabel"] {

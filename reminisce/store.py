@@ -115,14 +115,14 @@ def set_shared(clip_id: str, carer_id: str, shared: bool, path: Path | None = No
     return found
 
 
-def next_clip_id(clips: list[Clip]) -> str:
-    numbers = []
-    for clip in clips:
-        suffix = clip.clip_id.removeprefix("clip_")
-        if suffix.isdigit():
-            numbers.append(int(suffix))
-    nxt = max(numbers, default=0) + 1
-    return f"clip_{nxt:03d}"
+def next_clip_id(clips: list[Clip], when: datetime | None = None) -> str:
+    """Name a clip by when it was taken, e.g. clip_20261017_144612."""
+    base = f"clip_{(when or datetime.now().astimezone()):%Y%m%d_%H%M%S}"
+    taken = {clip.clip_id for clip in clips}
+    clip_id, n = base, 2
+    while clip_id in taken:
+        clip_id, n = f"{base}_{n}", n + 1
+    return clip_id
 
 
 def load_prefs(path: Path | None = None) -> dict:

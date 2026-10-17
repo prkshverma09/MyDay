@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from myday_memory.file_memory import file_record, file_records, load_records, write_stores
+from myday_memory.file_memory import file_record, file_records, load_records, read_memory, write_stores
 from myday_memory.parse_input import parse_llm_input
 
 HOME = Path(__file__).parents[1] / "examples" / "home-windows.jsonl"
@@ -46,6 +46,19 @@ def test_home_windows_split_into_general_and_key(tmp_path):
     write_stores(filed, tmp_path)
     assert (tmp_path / "general-memory.jsonl").read_text(encoding="utf-8").count("\n") == 3
     assert (tmp_path / "key-memory.jsonl").read_text(encoding="utf-8").count("\n") == 3
+    general_text = (tmp_path / "general_memory.txt").read_text(encoding="utf-8")
+    key_text = (tmp_path / "key_moments.txt").read_text(encoding="utf-8")
+    assert general_text.splitlines()[0] == "0:00–0:05  You made a cup of tea in the kitchen."
+    assert "0:05–0:10  You put your keys down in the hallway." in key_text.splitlines()
+    assert "keys" not in general_text
+    saved = json.loads((tmp_path / "general-memory.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert next(iter(saved)) == "text"
+    assert saved["text"] == general_text.splitlines()[0]
+    assert saved["video"]["camera_id"] == "pov"
+    assert saved["video"]["start_sec"] == 0.0
+    assert saved["video"]["end_sec"] == 5.0
+    assert saved["time_frame"]["start_sec"] == 0.0
+    assert read_memory(tmp_path / "general_memory.txt")[0]["statement"] == "You made a cup of tea in the kitchen."
 
 
 def test_yolo_person_count_is_not_a_visitor():
@@ -174,11 +187,12 @@ def test_page_flips_collapse_to_one_reading():
         _clip("read-4", 15, 20, "She turns a page."),
     ]
     filed = file_records(records)
-    assert filed["key"] == []
-    assert len(filed["general"]) == 1
-    entry = filed["general"][0]
+    assert filed["general"] == []
+    assert len(filed["key"]) == 1
+    entry = filed["key"][0]
     assert entry["statement"] == "You read Bluebirds."
-    assert entry["store"] == "general"
+    assert entry["store"] == "key"
+    assert entry["key_reason"] == "reading"
     assert entry["time_frame"]["start_sec"] == 0
     assert entry["time_frame"]["end_sec"] == 20
     assert entry["time_frame"]["source"] == "day.mp4"
@@ -187,6 +201,7 @@ def test_page_flips_collapse_to_one_reading():
 
 def test_one_page_turn_stays_one_moment():
     filed = file_records([_clip("page", 0, 5, "She flips a page.")])
+    assert filed["key"] == []
     assert len(filed["general"]) == 1
     assert filed["general"][0]["statement"] != "You read a book."
     assert filed["general"][0]["time_frame"]["end_sec"] == 5
@@ -201,11 +216,91 @@ def test_a_visitor_breaks_the_reading_run():
         _clip("read-4", 20, 25, "She flips a page."),
     ]
     filed = file_records(records)
-    assert [entry["statement"] for entry in filed["general"]] == [
+    assert filed["general"] == []
+    assert [entry["statement"] for entry in filed["key"]] == [
         "You read Bluebirds.",
+        'Sarah said "hello.".',
         "You read a book.",
     ]
-    assert filed["key"][0]["actors"] == ["Sarah"]
+    assert filed["key"][1]["actors"] == ["Sarah"]
+    assert filed["key"][0]["key_reason"] == "reading"
+    assert filed["key"][2]["key_reason"] == "reading"
+
+
+def test_kettle_resting_on_its_base_is_general():
+    entry = file_record(_clip("base", 0, 5, "She sets the kettle on its base on the counter.", "kitchen"))
+    assert entry["store"] == "general"
+    assert entry["key_reason"] is None
+
+
+def test_a_hand_on_the_kettle_is_not_the_kettle_switching_on():
+    entry = file_record(_clip("lid", 0, 5, "Her left hand rests on the kettle lid.", "kitchen"))
+    assert entry["store"] == "general"
+    assert entry["key_reason"] is None
+
+
+def test_model_cannot_invent_the_kettle_switching_on():
+    entry = file_record(
+        _clip("switch", 0, 5, "Her finger presses the switch at the top of the kettle.", "kitchen"),
+        llm=_Scripted({"statement": "You turned on the kettle.", "store": "key", "key_reason": "appliance on or off"}),
+    )
+    assert entry["store"] == "general"
+    assert "turned on" not in entry["statement"].lower()
+
+
+def test_kettle_clicks_off_is_key():
+    entry = file_record(
+        _clip("off", 0, 5, "The kettle clicks off, steam rising from its spout.", "kitchen")
+    )
+    assert entry["store"] == "key"
+    assert entry["key_reason"] == "appliance on or off"
+    assert entry["statement"] == "The kettle is off in the kitchen."
+
+
+def test_sentence_opening_is_not_a_visitor():
+    water = file_record(_clip("water", 0, 5, "Water runs from the tap into the kettle.", "kitchen"))
+    only = file_record(_clip("only", 5, 10, "Only her eyes move along the page."))
+    assert water["store"] == "general"
+    assert water["actors"] == []
+    assert only["store"] == "general"
+    assert only["actors"] == []
+
+
+def test_model_paraphrase_is_kept_when_it_adds_no_fact():
+    record = load_records(HOME)[0]
+    entry = file_record(
+        record,
+        llm=_Scripted(
+            {
+                "store": "key",
+                "statement": "You filled the kettle at the sink.",
+                "actors": ["Sarah"],
+                "importance": 0.1,
+            }
+        ),
+    )
+    assert entry["statement"] == "You filled the kettle at the sink."
+    assert entry["store"] == "general"
+    assert entry["actors"] == []
+
+
+def test_reading_run_collapses_across_segment_files():
+    sentences = [
+        "Her hand picks up the book Bluebirds.",
+        "She flips a page.",
+        "She turns a page.",
+    ]
+    records = []
+    for index, sentence in enumerate(sentences):
+        record = _clip(f"read-{index}", index * 5, index * 5 + 5, sentence)
+        record["source"] = f"segment_{index}.mp4"
+        records.append(record)
+    filed = file_records(records)
+    assert filed["general"] == []
+    assert len(filed["key"]) == 1
+    assert filed["key"][0]["statement"] == "You read Bluebirds."
+    assert filed["key"][0]["key_reason"] == "reading"
+    assert filed["key"][0]["time_frame"]["end_sec"] == 15
 
 
 def test_model_failure_uses_the_text(tmp_path):

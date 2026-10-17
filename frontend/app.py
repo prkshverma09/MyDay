@@ -13,7 +13,6 @@ import streamlit as st
 
 from frontend.style import CSS
 from frontend.views.ask import _page_ask
-from frontend.views.carer import _page_carer
 from frontend.views.clip import _page_clip
 from frontend.views.common import _flash, _nav, _prefs
 from frontend.views.day import _page_day
@@ -27,22 +26,20 @@ def main() -> None:
     prefs = _prefs()
     page = _nav()
     _flash()
-    if page == "My day":
-        _page_day(prefs)
-    elif page == "Ask":
+    if page == "Ask":
         _page_ask(prefs)
     elif page == "Story":
         _page_story(prefs)
-    elif page == "Carer":
-        _page_carer(prefs)
     elif page == "Clip":
         st.markdown(
             "<style>.block-container{max-width:1180px !important;}</style>",
             unsafe_allow_html=True,
         )
         _page_clip(prefs)
-    else:
+    elif page == "Eval":
         _page_eval()
+    else:
+        _page_day(prefs)
 
 
 main()
