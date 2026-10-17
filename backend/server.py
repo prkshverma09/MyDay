@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Describe 10-second chunks of the demo video as the playhead asks for them.
 
-The page at / plays examples/ui-demo/IMG_2516.mp4 and requests /chunk?t=seconds.
+The page at / plays demo_data/IMG_2517.mp4 and requests /chunk?t=seconds.
 Cosmos runs once per chunk index and stays in memory. The bearer token is read
 from the environment or /config/team-20.config and is never written to a response.
 """
@@ -23,7 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "pipeline"))
 import video_to_text as v2t  # noqa: E402
 
-DEFAULT_VIDEO = ROOT / "examples" / "ui-demo" / "IMG_2516.mp4"
+DEFAULT_VIDEO = ROOT / "demo_data" / "IMG_2517.mp4"
+ANNOTATIONS = ROOT / "demo_data" / "annotations.jsonl"
 PAGE = ROOT / "examples" / "ui-demo" / "index.html"
 HOST = "0.0.0.0"
 PORT = 8787
@@ -92,7 +93,60 @@ def _lock_for(key: tuple) -> threading.Lock:
         return lock
 
 
+def _saved_rows(video: Path) -> list[dict] | None:
+    """Precomputed Cosmos and YOLO rows for the default demo clip."""
+    if video.resolve() != DEFAULT_VIDEO.resolve():
+        return None
+    if not ANNOTATIONS.is_file():
+        return None
+    rows: list[dict] = []
+    for raw in ANNOTATIONS.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        row = json.loads(line)
+        if "IMG_2517" not in str(row.get("source") or ""):
+            return None
+        rows.append(row)
+    if not rows:
+        return None
+    rows.sort(key=lambda row: float(row["chunk"]["start_sec"]))
+    return rows
+
+
+def _payload_from_rows(rows: list[dict], time_s: float) -> dict:
+    moment = max(0.0, time_s)
+    chosen = rows[-1]
+    for index, row in enumerate(rows):
+        start = float(row["chunk"]["start_sec"])
+        end = float(row["chunk"]["end_sec"])
+        last = index == len(rows) - 1
+        if last or start <= moment < end:
+            if moment >= start or last:
+                chosen = row
+                break
+    start = float(chosen["chunk"]["start_sec"])
+    end = float(chosen["chunk"]["end_sec"])
+    duration = float(rows[-1]["chunk"]["end_sec"])
+    cosmos = chosen.get("cosmos") or {}
+    text = (cosmos.get("text") or "").strip() or " ".join(cosmos.get("sentences") or [])
+    yolo = chosen.get("yolo") or {}
+    return {
+        "index": int(chosen["chunk"]["index"]),
+        "start_sec": round(start, 3),
+        "end_sec": round(end, 3),
+        "seconds_ago": max(0, math.floor(duration - start)),
+        "is_last": int(chosen["chunk"]["index"]) == int(rows[-1]["chunk"]["index"]),
+        "duration_sec": round(duration, 3),
+        "cosmos_text": text,
+        "yolo": yolo.get("objects") or [],
+    }
+
+
 def describe_time(video: Path, time_s: float, chunk_s: float) -> dict:
+    saved = _saved_rows(video)
+    if saved is not None:
+        return _payload_from_rows(saved, time_s)
     info, segments = v2t.chunk_plan(str(video), chunk_s)
     segment = segment_at(segments, time_s)
     key = (str(video), int(segment.index), float(chunk_s))

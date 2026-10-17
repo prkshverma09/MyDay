@@ -6,8 +6,15 @@ rerun as the video plays. Chunk text is fetched from the description backend.
 
 from __future__ import annotations
 
+from pathlib import Path
+from urllib.parse import quote
+
 import streamlit as st
 import streamlit.components.v1 as components
+
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_VIDEO = ROOT / "demo_data" / "IMG_2517.mp4"
+_UPLOAD_DIR = ROOT / "data" / "clips" / "uploads"
 
 _PLAYER = """
 <!DOCTYPE html>
@@ -95,8 +102,9 @@ _PLAYER = """
       return "http://127.0.0.1:8787";
     }
     const BACKEND = backendBase();
+    const VIDEO_EXTRA = "__VIDEO_EXTRA__";
     const video = document.getElementById("video");
-    video.src = BACKEND + "/video";
+    video.src = BACKEND + "/video" + (VIDEO_EXTRA ? ("?" + VIDEO_EXTRA.slice(1)) : "");
     const range = document.getElementById("range");
     const ago = document.getElementById("ago");
     const text = document.getElementById("text");
@@ -151,7 +159,7 @@ _PLAYER = """
         text.textContent = "Describing this moment…";
       }
       try {
-        const response = await fetch(BACKEND + "/chunk?t=" + encodeURIComponent(time.toFixed(3)) + "&chunk=10");
+        const response = await fetch(BACKEND + "/chunk?t=" + encodeURIComponent(time.toFixed(3)) + "&chunk=10" + VIDEO_EXTRA);
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
         const now = Number.isFinite(video.currentTime) ? video.currentTime : 0;
@@ -188,10 +196,34 @@ _PLAYER = """
 """
 
 
+def _save_upload(upload) -> Path:
+    _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    suffix = Path(upload.name).suffix.lower()
+    if suffix not in {".mp4", ".mov", ".webm", ".mkv", ".avi"}:
+        suffix = ".mp4"
+    dest = _UPLOAD_DIR / f"player-upload{suffix}"
+    dest.write_bytes(upload.getvalue())
+    return dest
+
+
 def _page_clip(_prefs: dict) -> None:
     st.markdown('<p class="greeting">This clip</p>', unsafe_allow_html=True)
     st.markdown(
-        '<p class="quiet-note">One video. The number is how many whole seconds remain until it ends, and the text is the chunk under the playhead.</p>',
+        '<p class="quiet-note">IMG_2517.mp4 is loaded. The number is how many whole seconds remain until it ends, and the text is the chunk under the playhead. Upload another file to replace it.</p>',
         unsafe_allow_html=True,
     )
-    components.html(_PLAYER, height=640, scrolling=False)
+    upload = st.file_uploader(
+        "Clip",
+        type=["mp4", "mov", "webm", "mkv", "avi"],
+        help="IMG_2517.mp4 is already playing. Choose a different video to replace it.",
+    )
+    extra = ""
+    if upload is not None:
+        saved = _save_upload(upload)
+        extra = "&video=" + quote(saved.relative_to(ROOT).as_posix())
+        st.caption(f"Playing {upload.name}")
+    elif DEFAULT_VIDEO.is_file():
+        st.caption("Playing demo_data/IMG_2517.mp4")
+    else:
+        st.caption("demo_data/IMG_2517.mp4 is missing.")
+    components.html(_PLAYER.replace("__VIDEO_EXTRA__", extra), height=640, scrolling=False)
