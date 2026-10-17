@@ -1,0 +1,2027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video chunker implementation plan</title>
+  <style>
+    :root {
+      --wall: #d7e0d8;
+      --sheet: #f7f8f6;
+      --ink: #1a2420;
+      --muted: #3e4f47;
+      --splice: #c4372a;
+      --steel: #245c66;
+      --steel-deep: #1a4550;
+      --rule: #c5d0c8;
+      --chip: #e7eee8;
+      --film: #1a2420;
+      --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      --sans: "Avenir Next", "Segoe UI", sans-serif;
+      --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    body {
+      margin: 0;
+      background: var(--wall);
+      color: var(--ink);
+      font-family: var(--serif);
+      font-size: 1.125rem;
+      line-height: 1.55;
+    }
+
+    a { color: var(--steel-deep); }
+    a:hover { color: var(--splice); }
+
+    :focus-visible {
+      outline: 2px solid var(--splice);
+      outline-offset: 3px;
+    }
+
+    .skip {
+      position: absolute;
+      left: 1rem;
+      top: -4rem;
+      background: var(--sheet);
+      padding: 0.4rem 0.7rem;
+    }
+
+    .skip:focus { top: 1rem; }
+
+    .bench {
+      display: grid;
+      grid-template-columns: 4.5rem minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .film {
+      background: var(--film);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 0.7rem 0;
+      background-image:
+        repeating-linear-gradient(
+          to bottom,
+          transparent 0 10px,
+          #d7e0d8 10px 18px,
+          transparent 18px 32px
+        ),
+        repeating-linear-gradient(
+          to bottom,
+          transparent 0 10px,
+          #d7e0d8 10px 18px,
+          transparent 18px 32px
+        );
+      background-size: 0.55rem 32px, 0.55rem 32px;
+      background-position: 0.28rem 0, calc(100% - 0.28rem) 0;
+      background-repeat: repeat-y;
+    }
+
+    .film a {
+      color: #f4f7f2;
+      text-decoration: none;
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: 0.95rem;
+      text-align: center;
+      padding: 0.35rem 0;
+    }
+
+    .film a:hover,
+    .film a:focus-visible { color: #ffb4a8; }
+
+    .sheet {
+      width: min(920px, calc(100% - 3rem));
+      margin: 2rem auto 3rem;
+      background: var(--sheet);
+      padding: 3rem 3.4rem 4.5rem;
+    }
+
+    h1, h2, h3 {
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+
+    h1 { font-size: 3.1rem; margin: 0 0 0.8rem; }
+
+    h2 { font-size: 1.8rem; margin: 0 0 0.8rem; }
+
+    h3 { font-size: 1.28rem; margin: 1.6rem 0 0.5rem; }
+
+    p, li { max-width: 68ch; }
+
+    .lede {
+      font-size: 1.35rem;
+      line-height: 1.4;
+      margin-top: 0;
+    }
+
+    .meta {
+      font-family: var(--sans);
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 1.6rem;
+    }
+
+    section { margin-top: 2.8rem; }
+
+    .cut {
+      border: 0;
+      height: 0;
+      margin: 2.4rem 0 0;
+      border-top: 1px solid var(--rule);
+      position: relative;
+    }
+
+    .cut::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: -7px;
+      width: 14px;
+      height: 14px;
+      border-right: 2px solid var(--splice);
+      border-bottom: 2px solid var(--splice);
+      transform: rotate(-45deg);
+      background: var(--sheet);
+    }
+
+    .facts {
+      display: grid;
+      grid-template-columns: 9rem 1fr;
+      gap: 0.35rem 1rem;
+      margin: 1.2rem 0 0;
+      max-width: 68ch;
+    }
+
+    .facts dt {
+      font-family: var(--sans);
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    .facts dd { margin: 0; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 1.4rem;
+      font-size: 1rem;
+    }
+
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 0.55rem 0.7rem 0.55rem 0;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    th {
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    code, pre { font-family: var(--mono); }
+
+    code {
+      font-size: 0.86em;
+      background: var(--chip);
+      padding: 0.08em 0.28em;
+    }
+
+    pre {
+      background: var(--chip);
+      padding: 0.95rem 1rem;
+      overflow-x: auto;
+      line-height: 1.45;
+      font-size: 0.82rem;
+      max-width: none;
+    }
+
+    pre code { background: transparent; padding: 0; font-size: inherit; }
+
+    .diagram {
+      margin: 1.2rem 0 0.4rem;
+      overflow-x: auto;
+    }
+
+    svg { display: block; width: 100%; height: auto; }
+
+    .box { fill: var(--sheet); stroke: var(--steel); stroke-width: 1.6; }
+    .box-end { fill: #f3d7d3; stroke: var(--splice); stroke-width: 1.6; }
+    .box-film { fill: var(--film); stroke: var(--film); }
+    .label { font-family: var(--sans); font-size: 15px; fill: var(--ink); }
+    .label-light { font-family: var(--sans); font-size: 13px; fill: #f4f7f2; }
+    .small { font-family: var(--sans); font-size: 13px; fill: var(--muted); }
+    .small-light { font-family: var(--sans); font-size: 12px; fill: #d5e0da; }
+    .arrow { stroke: var(--steel-deep); stroke-width: 1.6; fill: none; }
+    .tick { stroke: var(--splice); stroke-width: 2; }
+
+    figcaption {
+      font-family: var(--sans);
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin-top: 0.4rem;
+      max-width: 68ch;
+    }
+
+    .task {
+      margin-top: 2rem;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 1.2rem 1fr;
+      gap: 0.55rem;
+      margin: 0.9rem 0;
+    }
+
+    .step input { margin-top: 0.45rem; accent-color: var(--splice); }
+
+    .step p { margin: 0.3rem 0; }
+
+    .call {
+      font-family: var(--sans);
+      background: #e5f0ea;
+      padding: 0.7rem 0.9rem;
+      margin: 0.8rem 0;
+      max-width: 68ch;
+    }
+
+    nav.contents ol { padding-left: 1.2rem; }
+
+    nav.contents a { text-decoration-thickness: 1px; }
+
+    @media (max-width: 720px) {
+      .bench { grid-template-columns: 1fr; }
+
+      .film {
+        position: sticky;
+        top: 0;
+        height: auto;
+        flex-direction: row;
+        justify-content: space-around;
+        z-index: 2;
+        padding: 0.45rem 1.2rem;
+        background-size: 32px 0.4rem, 32px 0.4rem;
+        background-position: 0 0.2rem, 0 calc(100% - 0.2rem);
+        background-repeat: repeat-x;
+      }
+
+      .sheet {
+        width: auto;
+        margin: 0;
+        padding: 1.6rem 1.15rem 3rem;
+      }
+
+      h1 { font-size: 2.2rem; }
+
+      .facts { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to the plan</a>
+  <div class="bench">
+    <nav class="film" aria-label="Tasks">
+      <a href="#task-1">1</a>
+      <a href="#task-2">2</a>
+      <a href="#task-3">3</a>
+      <a href="#task-4">4</a>
+      <a href="#task-5">5</a>
+      <a href="#task-6">6</a>
+    </nav>
+    <article class="sheet" id="content">
+      <p class="meta">Implementation plan · 17 October 2026 · MyDay / video-chunker</p>
+      <h1>Split one video into timed chunks</h1>
+      <p class="lede">A local Python command takes a video file, cuts it into pieces of a chosen length, and writes those pieces to a folder on disk.</p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 820 168" role="img" aria-labelledby="heroTitle heroDesc">
+          <title id="heroTitle">A 62 second video cut every 15 seconds</title>
+          <desc id="heroDesc">Five chunks. The first four are 15 seconds. The last is the 2 second remainder and is kept.</desc>
+          <text class="small" x="0" y="18">62 second source, 15 second cut</text>
+          <line class="arrow" x1="0" y1="58" x2="800" y2="58"/>
+          <line class="tick" x1="0" y1="48" x2="0" y2="68"/>
+          <line class="tick" x1="193.5" y1="48" x2="193.5" y2="68"/>
+          <line class="tick" x1="387" y1="48" x2="387" y2="68"/>
+          <line class="tick" x1="580.5" y1="48" x2="580.5" y2="68"/>
+          <line class="tick" x1="774" y1="48" x2="774" y2="68"/>
+          <line class="tick" x1="800" y1="48" x2="800" y2="68"/>
+          <rect class="box" x="4" y="78" width="186" height="52"/>
+          <rect class="box" x="197" y="78" width="186" height="52"/>
+          <rect class="box" x="390" y="78" width="186" height="52"/>
+          <rect class="box" x="583" y="78" width="186" height="52"/>
+          <rect class="box-end" x="776" y="78" width="24" height="52"/>
+          <text class="label" x="70" y="100">0000</text>
+          <text class="small" x="78" y="118">15s</text>
+          <text class="label" x="263" y="100">0001</text>
+          <text class="small" x="271" y="118">15s</text>
+          <text class="label" x="456" y="100">0002</text>
+          <text class="small" x="464" y="118">15s</text>
+          <text class="label" x="649" y="100">0003</text>
+          <text class="small" x="657" y="118">15s</text>
+          <text class="small" x="0" y="152">0s</text>
+          <text class="small" x="176" y="152">15s</text>
+          <text class="small" x="370" y="152">30s</text>
+          <text class="small" x="563" y="152">45s</text>
+          <text class="small" x="748" y="152">60s</text>
+          <text class="small" x="786" y="166">62s</text>
+        </svg>
+        <figcaption>The last piece is shorter. Its picture and sound stay in their own file. Nothing is dropped and nothing is padded to fill 15 seconds.</figcaption>
+      </figure>
+
+      <dl class="facts">
+        <dt>Goal</dt>
+        <dd>Build a Python command that writes a video as a sequence of MP4 chunks of a configurable duration, default 15 seconds, into a local folder.</dd>
+        <dt>Architecture</dt>
+        <dd>A command-line entry point probes the file with ffprobe, plans cut points in pure Python, then asks ffmpeg to write one MP4 per segment. A JSON manifest records the timeline.</dd>
+        <dt>Tech stack</dt>
+        <dd>Python 3.11, argparse, subprocess, pytest. ffmpeg 5 or newer and ffprobe on the machine. No runtime Python packages.</dd>
+        <dt>Spec</dt>
+        <dd>This document is the spec and the plan. The service code is not written yet. Tasks below are the build order.</dd>
+      </dl>
+
+      <p class="call">For agentic workers: use superpowers:subagent-driven-development or superpowers:executing-plans, task by task. The checkboxes on this page remember progress in this browser.</p>
+
+      <hr class="cut">
+      <section id="constraints">
+        <h2>Constraints</h2>
+        <ul>
+          <li>Python 3.11 or newer.</li>
+          <li>ffmpeg 5 or newer, and ffprobe, available on <code>PATH</code> or passed as flags.</li>
+          <li>One input file per invocation. A shell loop is the way to cut many files.</li>
+          <li>Default chunk length is 15 seconds. <code>--duration</code> sets it, in seconds, and must be longer than one frame.</li>
+          <li>Exact mode is the default. It re-encodes to H.264 and AAC so each cut lands on a frame.</li>
+          <li>Fast mode copies packets and may cut on a later keyframe, so a piece can run past the requested length.</li>
+          <li>Output files are MP4. Names are <code>{stem}_0000.mp4</code> upward, four digits, starting at zero.</li>
+          <li>The manifest is <code>{stem}.chunks.json</code> in the output folder.</li>
+          <li>A run refuses to replace existing chunk files unless <code>--overwrite</code> is set.</li>
+          <li>More than 10,000 chunks is refused.</li>
+          <li>The tool makes no network calls and adds no runtime pip dependencies.</li>
+        </ul>
+      </section>
+
+      <hr class="cut">
+      <section id="approaches">
+        <h2>Approach</h2>
+        <p>Three ways can cut a file into timed pieces. This plan uses the first.</p>
+        <table>
+          <thead>
+            <tr><th>Approach</th><th>What it costs</th><th>What you get</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>CLI plus ffmpeg</td>
+              <td>ffmpeg must be installed.</td>
+              <td>One command, a library function beside it, and frame-accurate cuts. Recommended.</td>
+            </tr>
+            <tr>
+              <td>HTTP service</td>
+              <td>Upload handling, a process to keep alive, and a second interface to test.</td>
+              <td>Useful later if another app must call this over the network. Out of this plan.</td>
+            </tr>
+            <tr>
+              <td>PyAV or MoviePy only</td>
+              <td>Heavier installs and more decoding code in Python.</td>
+              <td>No ffmpeg binary. Slower, and the hard parts are still the same cuts.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>The public function is <code>chunk_video</code>. The command <code>video-chunker</code> is a thin wrapper around it. A later HTTP wrapper can call the same function.</p>
+      </section>
+
+      <hr class="cut">
+      <section id="architecture">
+        <h2>Architecture</h2>
+        <figure class="diagram">
+          <svg viewBox="0 0 820 560" role="img" aria-labelledby="archTitle archDesc">
+            <title id="archTitle">Component flow from video file to output folder</title>
+            <desc id="archDesc">The CLI calls probe, then the planner, then the cutter. ffprobe and ffmpeg sit outside the Python process. The cutter writes MP4 files and a JSON manifest.</desc>
+            <defs>
+              <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                <path d="M0,0 L8,4 L0,8 Z" fill="#1a4550"/>
+              </marker>
+            </defs>
+            <rect class="box" x="40" y="24" width="250" height="64" rx="2"/>
+            <text class="label" x="58" y="52">Video file</text>
+            <text class="small" x="58" y="72">path on disk</text>
+            <line class="arrow" x1="165" y1="88" x2="165" y2="124" marker-end="url(#arrowhead)"/>
+
+            <rect class="box" x="40" y="128" width="250" height="72" rx="2"/>
+            <text class="label" x="58" y="156">CLI</text>
+            <text class="small" x="58" y="178">duration, mode, output, overwrite</text>
+            <line class="arrow" x1="165" y1="200" x2="165" y2="236" marker-end="url(#arrowhead)"/>
+
+            <rect class="box" x="40" y="240" width="250" height="72" rx="2"/>
+            <text class="label" x="58" y="268">Probe</text>
+            <text class="small" x="58" y="290">duration, codecs, frame rate</text>
+            <rect class="box-film" x="360" y="240" width="200" height="72" rx="2"/>
+            <text class="label-light" x="378" y="268">ffprobe</text>
+            <text class="small-light" x="378" y="290">external binary</text>
+            <line class="arrow" x1="290" y1="276" x2="356" y2="276" marker-end="url(#arrowhead)"/>
+            <line class="arrow" x1="165" y1="312" x2="165" y2="348" marker-end="url(#arrowhead)"/>
+
+            <rect class="box" x="40" y="352" width="250" height="72" rx="2"/>
+            <text class="label" x="58" y="380">Planner</text>
+            <text class="small" x="58" y="402">list of start and end times</text>
+            <line class="arrow" x1="165" y1="424" x2="165" y2="460" marker-end="url(#arrowhead)"/>
+
+            <rect class="box" x="40" y="464" width="250" height="72" rx="2"/>
+            <text class="label" x="58" y="492">Cutter</text>
+            <text class="small" x="58" y="514">one ffmpeg segment pass</text>
+            <rect class="box-film" x="360" y="464" width="200" height="72" rx="2"/>
+            <text class="label-light" x="378" y="492">ffmpeg</text>
+            <text class="small-light" x="378" y="514">external binary</text>
+            <line class="arrow" x1="290" y1="500" x2="356" y2="500" marker-end="url(#arrowhead)"/>
+
+            <rect class="box" x="590" y="430" width="200" height="106" rx="2"/>
+            <text class="label" x="608" y="460">Output folder</text>
+            <text class="small" x="608" y="484">stem_0000.mp4 …</text>
+            <text class="small" x="608" y="506">stem.chunks.json</text>
+            <line class="arrow" x1="290" y1="520" x2="586" y2="490" marker-end="url(#arrowhead)"/>
+          </svg>
+          <figcaption>Probe and cut are the only steps that start another process. Planning and file-name rules stay in Python so tests can run without a media file.</figcaption>
+        </figure>
+
+        <h3>Run lifecycle</h3>
+        <figure class="diagram">
+          <svg viewBox="0 0 820 250" role="img" aria-labelledby="lifeTitle lifeDesc">
+            <title id="lifeTitle">States of one chunk run</title>
+            <desc id="lifeDesc">A run moves from ready, to probed, planned, cutting, verified, and written. Validation failures end at rejected with exit code 2. An ffmpeg or verify failure ends at failed with exit code 1.</desc>
+            <rect class="box" x="16" y="28" width="110" height="48"/>
+            <text class="label" x="46" y="58">Ready</text>
+            <rect class="box" x="156" y="28" width="110" height="48"/>
+            <text class="label" x="178" y="58">Probed</text>
+            <rect class="box" x="296" y="28" width="110" height="48"/>
+            <text class="label" x="316" y="58">Planned</text>
+            <rect class="box" x="436" y="28" width="110" height="48"/>
+            <text class="label" x="458" y="58">Cutting</text>
+            <rect class="box" x="576" y="28" width="110" height="48"/>
+            <text class="label" x="594" y="58">Verified</text>
+            <rect class="box" x="560" y="148" width="150" height="58"/>
+            <text class="label" x="598" y="172">Written</text>
+            <text class="small" x="606" y="192">exit 0</text>
+            <rect class="box-end" x="150" y="148" width="170" height="58"/>
+            <text class="label" x="186" y="172">Rejected</text>
+            <text class="small" x="202" y="192">exit 2</text>
+            <rect class="box-end" x="360" y="148" width="160" height="58"/>
+            <text class="label" x="410" y="172">Failed</text>
+            <text class="small" x="410" y="192">exit 1</text>
+            <line class="arrow" x1="126" y1="52" x2="152" y2="52" marker-end="url(#arrowhead)"/>
+            <line class="arrow" x1="266" y1="52" x2="292" y2="52" marker-end="url(#arrowhead)"/>
+            <line class="arrow" x1="406" y1="52" x2="432" y2="52" marker-end="url(#arrowhead)"/>
+            <line class="arrow" x1="546" y1="52" x2="572" y2="52" marker-end="url(#arrowhead)"/>
+            <line class="arrow" x1="631" y1="76" x2="631" y2="146" marker-end="url(#arrowhead)"/>
+            <line class="arrow" x1="211" y1="76" x2="211" y2="146" marker-end="url(#arrowhead)"/>
+            <line class="arrow" x1="491" y1="76" x2="450" y2="146" marker-end="url(#arrowhead)"/>
+          </svg>
+          <figcaption>Exit 2 covers bad arguments, a missing binary, a missing file, no video stream, a fast-mode codec ffmpeg cannot copy into MP4, and chunk names that already exist. Exit 1 covers a non-zero ffmpeg status or a chunk whose measured length misses the plan.</figcaption>
+        </figure>
+      </section>
+
+      <hr class="cut">
+      <section id="files">
+        <h2>Files</h2>
+        <p>Everything lives in <code>video-chunker/</code> at the MyDay repo root. This HTML file stays here. The tasks create the rest.</p>
+        <table>
+          <thead>
+            <tr><th>File</th><th>Responsibility</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>pyproject.toml</code></td><td>Package metadata, the <code>video-chunker</code> script, pytest as a dev extra.</td></tr>
+            <tr><td><code>src/video_chunker/models.py</code></td><td>Segment, MediaInfo, ChunkRecord, mode names, ProbeError, CutError.</td></tr>
+            <tr><td><code>src/video_chunker/plan.py</code></td><td>Turn a duration into segments. Frame tolerance math.</td></tr>
+            <tr><td><code>src/video_chunker/probe.py</code></td><td>Parse ffprobe JSON and run ffprobe.</td></tr>
+            <tr><td><code>src/video_chunker/output.py</code></td><td>Filenames, overwrite rules, manifest writing.</td></tr>
+            <tr><td><code>src/video_chunker/cut.py</code></td><td>ffmpeg command, fast-mode codec check, <code>chunk_video</code>.</td></tr>
+            <tr><td><code>src/video_chunker/cli.py</code></td><td>Argument parsing and exit codes.</td></tr>
+            <tr><td><code>src/video_chunker/__main__.py</code></td><td><code>python -m video_chunker</code>.</td></tr>
+            <tr><td><code>tests/</code></td><td>One test module per behavior, plus a sample-video helper.</td></tr>
+            <tr><td><code>README.md</code></td><td>Install, examples, exit codes.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <hr class="cut">
+      <section id="contracts">
+        <h2>Contracts</h2>
+        <p>Later tasks use these names exactly.</p>
+        <pre><code>MODE_EXACT = "exact"
+MODE_FAST = "fast"
+MODES = (MODE_EXACT, MODE_FAST)
+
+@dataclass(frozen=True)
+class Segment:
+    index: int
+    start_s: float
+    end_s: float
+    def duration_s(self) -&gt; float: ...
+
+@dataclass(frozen=True)
+class MediaInfo:
+    path: Path
+    duration_s: float
+    video_codec: str
+    audio_codec: str | None
+    format_name: str
+    frame_rate: float
+
+@dataclass(frozen=True)
+class ChunkRecord:
+    index: int
+    path: Path
+    start_s: float
+    end_s: float
+
+def plan_segments(duration_s: float, chunk_s: float, *, min_tail_s: float = 0.001) -&gt; list[Segment]: ...
+def duration_tolerance_s(frame_rate: float) -&gt; float: ...
+def parse_probe_json(payload: dict, source: Path) -&gt; MediaInfo: ...
+def probe_media(source: Path, *, ffprobe_bin: str = "ffprobe") -&gt; MediaInfo: ...
+def chunk_filename(source: Path, index: int) -&gt; str: ...
+def chunk_path(output_dir: Path, source: Path, index: int) -&gt; Path: ...
+def existing_chunk_paths(output_dir: Path, source: Path) -&gt; list[Path]: ...
+def manifest_path(output_dir: Path, source: Path) -&gt; Path: ...
+def prepare_output_dir(output_dir: Path, source: Path, *, overwrite: bool) -&gt; None: ...
+def write_manifest(output_dir: Path, source: Path, chunk_s: float, mode: str, chunks: list[ChunkRecord]) -&gt; Path: ...
+def assert_fast_mode_compatible(info: MediaInfo) -&gt; None: ...
+def build_ffmpeg_command(*, ffmpeg_bin: str, source: Path, output_pattern: Path, chunk_s: float, mode: str, has_audio: bool) -&gt; list[str]: ...
+def chunk_video(source: Path, output_dir: Path, *, chunk_s: float = 15.0, mode: str = "exact", overwrite: bool = False, ffmpeg_bin: str = "ffmpeg", ffprobe_bin: str = "ffprobe") -&gt; list[ChunkRecord]: ...
+def resolve_bin(explicit: str | None, name: str) -&gt; str: ...
+def main(argv: list[str] | None = None) -&gt; int: ...
+
+class CutFailed(CutError): ...</code></pre>
+
+        <h3>Segment rules</h3>
+        <ul>
+          <li><code>duration_s</code> and <code>chunk_s</code> must be greater than zero. Otherwise <code>ValueError</code>.</li>
+          <li>A source shorter than one chunk is one segment from <code>0</code> to <code>duration_s</code>.</li>
+          <li>A remainder longer than <code>min_tail_s</code> is its own last segment.</li>
+          <li>A remainder of <code>min_tail_s</code> or less extends the previous segment to <code>duration_s</code>.</li>
+          <li><code>chunk_video</code> calls the planner with <code>min_tail_s = 1 / frame_rate</code>, so a tail shorter than one frame stays on the previous chunk.</li>
+        </ul>
+
+        <h3>Output rules</h3>
+        <ul>
+          <li>Filename: <code>f"{source.stem}_{index:04d}.mp4"</code>.</li>
+          <li>A stem containing a comma is rejected before ffprobe runs. <code>chunk_video</code> calls <code>chunk_filename(source, 0)</code> and that raises <code>CutError</code>.</li>
+          <li>If the output path exists and is a file, <code>CutError</code>.</li>
+          <li>If any <code>{stem}_dddd.mp4</code> already exists and <code>overwrite</code> is false, <code>CutError</code>, and those files stay untouched.</li>
+          <li>If <code>overwrite</code> is true, delete every <code>{stem}_dddd.mp4</code> and <code>{stem}.chunks.json</code> in that folder, then cut.</li>
+          <li>The manifest is written only after every chunk matches the plan. Write it to a temp file, then rename it into place.</li>
+        </ul>
+
+        <h3>Manifest shape</h3>
+        <pre><code>{
+  "source": "/absolute/path/holiday.mp4",
+  "chunk_s": 15.0,
+  "mode": "exact",
+  "chunks": [
+    {
+      "index": 0,
+      "file": "holiday_0000.mp4",
+      "path": "/absolute/path/chunks/holiday_0000.mp4",
+      "start_s": 0.0,
+      "end_s": 15.0
+    }
+  ]
+}</code></pre>
+
+        <h3>ffmpeg command</h3>
+        <p>Exact mode, with audio:</p>
+        <pre><code>ffmpeg -hide_banner -loglevel error -y -i SOURCE \
+  -map 0:v:0 -map 0:a:0 \
+  -f segment -segment_time CHUNK \
+  -reset_timestamps 1 \
+  -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p \
+  -c:a aac -b:a 128k \
+  OUTPUT/stem_%04d.mp4</code></pre>
+        <p>Fast mode swaps the codec arguments for <code>-c copy</code>. A file with no audio omits <code>-map 0:a:0</code> and the AAC arguments. Fast mode accepts video codecs <code>h264</code>, <code>hevc</code>, and <code>mpeg4</code>, and audio codecs <code>aac</code>, <code>mp3</code>, <code>ac3</code>, or no audio. Any other codec raises <code>CutError</code> before ffmpeg starts.</p>
+        <p>After a successful encode, probe each output file. In exact mode the file count must equal the segment count, and each measured duration must sit within <code>duration_tolerance_s(frame_rate)</code> of the planned duration. That tolerance is <code>max(2 / frame_rate, 0.04)</code> seconds. In fast mode, require at least one file and a total measured duration within <code>0.5</code> seconds of the source. Timeline fields in the manifest are the planned times in exact mode. In fast mode they are the cumulative probed durations, because keyframe cuts own the real boundaries.</p>
+
+        <h3>Command line</h3>
+        <pre><code>video-chunker INPUT [--duration 15] [--output ./chunks] [--mode exact|fast] [--overwrite] [--ffmpeg PATH] [--ffprobe PATH]</code></pre>
+        <p>Stdout is one absolute chunk path per line. Messages go to stderr. Exit <code>0</code> on success, <code>2</code> on rejection, <code>1</code> on cut or verify failure.</p>
+      </section>
+
+      <hr class="cut">
+      <section id="review">
+        <h2>Review focus</h2>
+        <p>These five cases are the ones most likely to surprise someone using the tool. Each has a test in the task that owns the behavior.</p>
+        <ol>
+          <li>A video shorter than the chunk length becomes one file of the whole video. Pinned by <code>test_shorter_than_chunk_is_one_segment</code> and <code>test_short_video_writes_one_file</code>.</li>
+          <li>A length that does not divide evenly keeps the remainder as the last file. Pinned by <code>test_remainder_is_its_own_chunk</code> and <code>test_remainder_chunk_is_kept</code>.</li>
+          <li>Existing chunk names without <code>--overwrite</code> leave those files byte-for-byte as they were. Pinned by <code>test_prepare_refuses_existing_chunk</code> and <code>test_second_run_without_overwrite_keeps_bytes</code>.</li>
+          <li>A missing ffmpeg or ffprobe exits 2 and creates no chunk files. Pinned by <code>test_cli_missing_binary_creates_nothing</code>.</li>
+          <li>Fast mode with a codec that cannot be copied into MP4, such as VP9, exits before ffmpeg runs and writes nothing. Pinned by <code>test_fast_mode_rejects_vp9</code> and <code>test_chunk_video_fast_reject_writes_nothing</code>.</li>
+        </ol>
+      </section>
+
+      <hr class="cut">
+      <section id="tasks">
+        <h2>Tasks</h2>
+        <p>Run every command from <code>video-chunker/</code>. Each task ends in a commit. The implementer creates those commits; this plan file is already in the tree.</p>
+
+        <article class="task" id="task-1">
+          <h3>Task 1: Segment planner</h3>
+          <p><strong>Files:</strong> create <code>pyproject.toml</code>, <code>.gitignore</code>, <code>src/video_chunker/__init__.py</code>, <code>src/video_chunker/models.py</code>, <code>src/video_chunker/plan.py</code>, <code>tests/test_plan.py</code>.</p>
+          <p><strong>Produces:</strong> <code>plan_segments</code>, <code>duration_tolerance_s</code>, <code>Segment</code>, <code>MediaInfo</code>, <code>ChunkRecord</code>, <code>MODE_EXACT</code>, <code>MODE_FAST</code>, <code>MODES</code>, <code>ProbeError</code>, <code>CutError</code>, <code>CutFailed</code>.</p>
+
+          <div class="step">
+            <input type="checkbox" data-step="1-1" aria-label="Task 1 step 1">
+            <div>
+              <p><strong>Step 1: Write the failing test</strong></p>
+              <pre><code># tests/test_plan.py
+import pytest
+
+from video_chunker.plan import duration_tolerance_s, plan_segments
+
+
+def test_exact_multiple_has_no_extra_tail():
+    segments = plan_segments(45.0, 15.0)
+    assert [(s.index, s.start_s, s.end_s) for s in segments] == [
+        (0, 0.0, 15.0),
+        (1, 15.0, 30.0),
+        (2, 30.0, 45.0),
+    ]
+
+
+def test_remainder_is_its_own_chunk():
+    segments = plan_segments(62.0, 15.0)
+    assert len(segments) == 5
+    assert segments[-1].start_s == 60.0
+    assert segments[-1].end_s == 62.0
+    assert segments[-1].duration_s == 2.0
+
+
+def test_shorter_than_chunk_is_one_segment():
+    segments = plan_segments(4.0, 15.0)
+    assert len(segments) == 1
+    assert segments[0].start_s == 0.0
+    assert segments[0].end_s == 4.0
+
+
+def test_sub_frame_tail_folds_into_previous():
+    segments = plan_segments(30.01, 15.0, min_tail_s=0.04)
+    assert len(segments) == 2
+    assert segments[-1].end_s == 30.01
+
+
+def test_rejects_non_positive_chunk():
+    with pytest.raises(ValueError, match="chunk_s"):
+        plan_segments(10, 0)
+
+
+def test_rejects_non_positive_duration():
+    with pytest.raises(ValueError, match="duration_s"):
+        plan_segments(0, 15)
+
+
+def test_tolerance_is_two_frames_with_a_floor():
+    assert duration_tolerance_s(25) == pytest.approx(0.08)
+    assert duration_tolerance_s(120) == pytest.approx(0.04)
+    assert duration_tolerance_s(0) == pytest.approx(0.08)</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="1-2" aria-label="Task 1 step 2">
+            <div>
+              <p><strong>Step 2: Run the test to verify it fails</strong></p>
+              <pre><code>python -m pip install -e ".[dev]"
+pytest tests/test_plan.py -v</code></pre>
+              <p>Expected: collection error, <code>video_chunker</code> is not a package yet. Add the scaffold in the next step, then the assertion failures appear only if the functions are missing. After the scaffold and before the functions exist, pytest fails with import errors for <code>plan_segments</code>.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="1-3" aria-label="Task 1 step 3">
+            <div>
+              <p><strong>Step 3: Write the minimal implementation</strong></p>
+              <pre><code># pyproject.toml
+[build-system]
+requires = ["setuptools&gt;=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "video-chunker"
+version = "0.1.0"
+description = "Cut a local video file into timed MP4 chunks."
+requires-python = "&gt;=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest&gt;=8"]
+
+[project.scripts]
+video-chunker = "video_chunker.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# .gitignore
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+chunks/</code></pre>
+              <pre><code># src/video_chunker/__init__.py
+# filled in Task 5
+
+# src/video_chunker/models.py
+from dataclasses import dataclass
+from pathlib import Path
+
+MODE_EXACT = "exact"
+MODE_FAST = "fast"
+MODES = (MODE_EXACT, MODE_FAST)
+
+
+class ProbeError(Exception):
+    pass
+
+
+class CutError(Exception):
+    pass
+
+
+class CutFailed(CutError):
+    """ffmpeg ran, or the outputs did not match the plan."""
+
+
+@dataclass(frozen=True)
+class Segment:
+    index: int
+    start_s: float
+    end_s: float
+
+    @property
+    def duration_s(self) -&gt; float:
+        return self.end_s - self.start_s
+
+
+@dataclass(frozen=True)
+class MediaInfo:
+    path: Path
+    duration_s: float
+    video_codec: str
+    audio_codec: str | None
+    format_name: str
+    frame_rate: float
+
+
+@dataclass(frozen=True)
+class ChunkRecord:
+    index: int
+    path: Path
+    start_s: float
+    end_s: float</code></pre>
+              <pre><code># src/video_chunker/plan.py
+from video_chunker.models import Segment
+
+
+def plan_segments(
+    duration_s: float,
+    chunk_s: float,
+    *,
+    min_tail_s: float = 0.001,
+) -&gt; list[Segment]:
+    if duration_s &lt;= 0:
+        raise ValueError("duration_s must be &gt; 0")
+    if chunk_s &lt;= 0:
+        raise ValueError("chunk_s must be &gt; 0")
+    if min_tail_s &lt; 0:
+        raise ValueError("min_tail_s must be &gt;= 0")
+
+    segments: list[Segment] = []
+    start = 0.0
+    index = 0
+    while True:
+        remaining = duration_s - start
+        if remaining &lt;= min_tail_s:
+            if segments:
+                previous = segments[-1]
+                segments[-1] = Segment(previous.index, previous.start_s, duration_s)
+            break
+        end = start + chunk_s
+        if end &gt;= duration_s - min_tail_s:
+            end = duration_s
+        segments.append(Segment(index, start, end))
+        if end &gt;= duration_s:
+            break
+        start = end
+        index += 1
+    if not segments:
+        raise ValueError("duration_s is shorter than min_tail_s")
+    return segments
+
+
+def duration_tolerance_s(frame_rate: float) -&gt; float:
+    if frame_rate &lt;= 0:
+        return 0.08
+    return max(2.0 / frame_rate, 0.04)</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="1-4" aria-label="Task 1 step 4">
+            <div>
+              <p><strong>Step 4: Run the test to verify it passes</strong></p>
+              <pre><code>pytest tests/test_plan.py -v</code></pre>
+              <p>Expected: 7 passed.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="1-5" aria-label="Task 1 step 5">
+            <div>
+              <p><strong>Step 5: Commit</strong></p>
+              <pre><code>git add pyproject.toml .gitignore src/video_chunker/__init__.py \
+  src/video_chunker/models.py src/video_chunker/plan.py tests/test_plan.py
+git commit -m "feat: plan video chunk boundaries"</code></pre>
+            </div>
+          </div>
+        </article>
+
+        <article class="task" id="task-2">
+          <h3>Task 2: Probe</h3>
+          <p><strong>Files:</strong> create <code>src/video_chunker/probe.py</code>, <code>tests/test_probe.py</code>.</p>
+          <p><strong>Consumes:</strong> <code>MediaInfo</code>, <code>ProbeError</code>.</p>
+          <p><strong>Produces:</strong> <code>parse_probe_json(payload: dict, source: Path) -&gt; MediaInfo</code>, <code>probe_media(source: Path, *, ffprobe_bin: str = "ffprobe") -&gt; MediaInfo</code>.</p>
+
+          <div class="step">
+            <input type="checkbox" data-step="2-1" aria-label="Task 2 step 1">
+            <div>
+              <p><strong>Step 1: Write the failing test</strong></p>
+              <pre><code># tests/test_probe.py
+import json
+from pathlib import Path
+
+import pytest
+
+from video_chunker.models import ProbeError
+from video_chunker.probe import parse_probe_json, probe_media
+
+
+def test_parse_video_and_audio():
+    payload = {
+        "format": {"duration": "62.5", "format_name": "mov,mp4,m4a,3gp,3g2,mj2"},
+        "streams": [
+            {"codec_type": "video", "codec_name": "h264", "r_frame_rate": "30000/1001"},
+            {"codec_type": "audio", "codec_name": "aac"},
+        ],
+    }
+    info = parse_probe_json(payload, Path("holiday.mp4"))
+    assert info.duration_s == pytest.approx(62.5)
+    assert info.video_codec == "h264"
+    assert info.audio_codec == "aac"
+    assert info.frame_rate == pytest.approx(30000 / 1001)
+
+
+def test_parse_video_without_audio():
+    payload = {
+        "format": {"duration": "4", "format_name": "mp4"},
+        "streams": [
+            {"codec_type": "video", "codec_name": "hevc", "r_frame_rate": "25/1"},
+        ],
+    }
+    info = parse_probe_json(payload, Path("silent.mp4"))
+    assert info.audio_codec is None
+    assert info.frame_rate == pytest.approx(25)
+
+
+def test_parse_rejects_audio_only():
+    payload = {
+        "format": {"duration": "4", "format_name": "mp3"},
+        "streams": [{"codec_type": "audio", "codec_name": "mp3"}],
+    }
+    with pytest.raises(ProbeError, match="no video stream"):
+        parse_probe_json(payload, Path("song.mp3"))
+
+
+def test_parse_rejects_missing_duration():
+    payload = {
+        "format": {"format_name": "mp4"},
+        "streams": [{"codec_type": "video", "codec_name": "h264", "r_frame_rate": "25/1"}],
+    }
+    with pytest.raises(ProbeError, match="no duration"):
+        parse_probe_json(payload, Path("bad.mp4"))
+
+
+def test_probe_media_uses_ffprobe_json(tmp_path, monkeypatch):
+    source = tmp_path / "clip.mp4"
+    source.write_bytes(b"not really")
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        class Result:
+            returncode = 0
+            stdout = json.dumps({
+                "format": {"duration": "2", "format_name": "mp4"},
+                "streams": [
+                    {"codec_type": "video", "codec_name": "h264", "r_frame_rate": "25/1"},
+                ],
+            })
+            stderr = ""
+        return Result()
+
+    monkeypatch.setattr("video_chunker.probe.subprocess.run", fake_run)
+    info = probe_media(source, ffprobe_bin="ffprobe")
+    assert captured["cmd"][0] == "ffprobe"
+    assert str(source) in captured["cmd"]
+    assert info.duration_s == pytest.approx(2)
+
+
+def test_probe_media_raises_on_ffprobe_failure(tmp_path, monkeypatch):
+    source = tmp_path / "clip.mp4"
+    source.write_bytes(b"x")
+
+    def fake_run(cmd, **kwargs):
+        class Result:
+            returncode = 1
+            stdout = ""
+            stderr = "Invalid data"
+        return Result()
+
+    monkeypatch.setattr("video_chunker.probe.subprocess.run", fake_run)
+    with pytest.raises(ProbeError, match="Invalid data"):
+        probe_media(source)</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="2-2" aria-label="Task 2 step 2">
+            <div>
+              <p><strong>Step 2: Run the test to verify it fails</strong></p>
+              <pre><code>pytest tests/test_probe.py -v</code></pre>
+              <p>Expected: import error for <code>video_chunker.probe</code>.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="2-3" aria-label="Task 2 step 3">
+            <div>
+              <p><strong>Step 3: Write the minimal implementation</strong></p>
+              <pre><code># src/video_chunker/probe.py
+import subprocess
+from pathlib import Path
+
+from video_chunker.models import MediaInfo, ProbeError
+
+
+def _parse_rate(value: str) -&gt; float:
+    if "/" in value:
+        num, den = value.split("/", 1)
+        den_f = float(den)
+        if den_f == 0:
+            return 0.0
+        return float(num) / den_f
+    return float(value)
+
+
+def parse_probe_json(payload: dict, source: Path) -&gt; MediaInfo:
+    streams = payload.get("streams") or []
+    video = next((s for s in streams if s.get("codec_type") == "video"), None)
+    if video is None:
+        raise ProbeError(f"{source} has no video stream")
+    audio = next((s for s in streams if s.get("codec_type") == "audio"), None)
+    fmt = payload.get("format") or {}
+    raw_duration = fmt.get("duration") or video.get("duration")
+    if raw_duration is None:
+        raise ProbeError(f"{source} has no duration")
+    duration_s = float(raw_duration)
+    if duration_s &lt;= 0:
+        raise ProbeError(f"{source} has a non-positive duration")
+    frame_rate = _parse_rate(str(video.get("r_frame_rate") or "0/1"))
+    if frame_rate &lt;= 0:
+        frame_rate = 25.0
+    audio_name = audio.get("codec_name") if audio else None
+    return MediaInfo(
+        path=source,
+        duration_s=duration_s,
+        video_codec=str(video.get("codec_name") or "unknown"),
+        audio_codec=str(audio_name) if audio_name else None,
+        format_name=str(fmt.get("format_name") or "unknown"),
+        frame_rate=frame_rate,
+    )
+
+
+def probe_media(source: Path, *, ffprobe_bin: str = "ffprobe") -&gt; MediaInfo:
+    result = subprocess.run(
+        [
+            ffprobe_bin,
+            "-v",
+            "error",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "ffprobe failed"
+        raise ProbeError(detail)
+    import json
+    return parse_probe_json(json.loads(result.stdout), source)</code></pre>
+              <p>Move <code>import json</code> to the top of the file with the other imports. The snippet shows it beside the call so the parse step is obvious.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="2-4" aria-label="Task 2 step 4">
+            <div>
+              <p><strong>Step 4: Run the test to verify it passes</strong></p>
+              <pre><code>pytest tests/test_probe.py -v</code></pre>
+              <p>Expected: 6 passed.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="2-5" aria-label="Task 2 step 5">
+            <div>
+              <p><strong>Step 5: Commit</strong></p>
+              <pre><code>git add src/video_chunker/probe.py tests/test_probe.py
+git commit -m "feat: probe video duration and codecs"</code></pre>
+            </div>
+          </div>
+        </article>
+
+        <article class="task" id="task-3">
+          <h3>Task 3: Output names and manifest</h3>
+          <p><strong>Files:</strong> create <code>src/video_chunker/output.py</code>, <code>tests/test_output.py</code>.</p>
+          <p><strong>Consumes:</strong> <code>ChunkRecord</code>, <code>CutError</code>.</p>
+          <p><strong>Produces:</strong> <code>chunk_filename</code>, <code>chunk_path</code>, <code>existing_chunk_paths</code>, <code>manifest_path</code>, <code>prepare_output_dir</code>, <code>write_manifest</code>.</p>
+
+          <div class="step">
+            <input type="checkbox" data-step="3-1" aria-label="Task 3 step 1">
+            <div>
+              <p><strong>Step 1: Write the failing test</strong></p>
+              <pre><code># tests/test_output.py
+import json
+from pathlib import Path
+
+import pytest
+
+from video_chunker.models import ChunkRecord, CutError
+from video_chunker.output import (
+    chunk_filename,
+    existing_chunk_paths,
+    manifest_path,
+    prepare_output_dir,
+    write_manifest,
+)
+
+
+def test_filename_is_zero_padded():
+    assert chunk_filename(Path("/vids/holiday.mp4"), 0) == "holiday_0000.mp4"
+    assert chunk_filename(Path("/vids/holiday.mp4"), 12) == "holiday_0012.mp4"
+
+
+def test_filename_rejects_comma_in_stem():
+    with pytest.raises(CutError, match="comma"):
+        chunk_filename(Path("my,trip.mp4"), 0)
+
+
+def test_prepare_refuses_existing_chunk(tmp_path):
+    source = Path("holiday.mp4")
+    kept = tmp_path / "holiday_0000.mp4"
+    kept.write_bytes(b"original")
+    with pytest.raises(CutError, match="already exists"):
+        prepare_output_dir(tmp_path, source, overwrite=False)
+    assert kept.read_bytes() == b"original"
+
+
+def test_prepare_overwrite_clears_stale_indexes(tmp_path):
+    source = Path("holiday.mp4")
+    (tmp_path / "holiday_0000.mp4").write_bytes(b"a")
+    (tmp_path / "holiday_0003.mp4").write_bytes(b"stale")
+    (tmp_path / "holiday.chunks.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "other_0000.mp4").write_bytes(b"leave")
+    prepare_output_dir(tmp_path, source, overwrite=True)
+    assert existing_chunk_paths(tmp_path, source) == []
+    assert not (tmp_path / "holiday.chunks.json").exists()
+    assert (tmp_path / "other_0000.mp4").read_bytes() == b"leave"
+
+
+def test_prepare_rejects_output_path_that_is_a_file(tmp_path):
+    blocked = tmp_path / "not-a-dir"
+    blocked.write_text("x", encoding="utf-8")
+    with pytest.raises(CutError, match="not a directory"):
+        prepare_output_dir(blocked, Path("holiday.mp4"), overwrite=False)
+
+
+def test_write_manifest_uses_stem_name(tmp_path):
+    source = Path("/vids/holiday.mp4")
+    record = ChunkRecord(
+        index=0,
+        path=tmp_path / "holiday_0000.mp4",
+        start_s=0.0,
+        end_s=15.0,
+    )
+    path = write_manifest(tmp_path, source, 15.0, "exact", [record])
+    assert path == manifest_path(tmp_path, source)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["chunk_s"] == 15.0
+    assert payload["mode"] == "exact"
+    assert payload["chunks"][0]["file"] == "holiday_0000.mp4"
+    assert payload["chunks"][0]["start_s"] == 0.0
+    assert payload["source"].endswith("holiday.mp4")</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="3-2" aria-label="Task 3 step 2">
+            <div>
+              <p><strong>Step 2: Run the test to verify it fails</strong></p>
+              <pre><code>pytest tests/test_output.py -v</code></pre>
+              <p>Expected: import error for <code>video_chunker.output</code>.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="3-3" aria-label="Task 3 step 3">
+            <div>
+              <p><strong>Step 3: Write the minimal implementation</strong></p>
+              <pre><code># src/video_chunker/output.py
+import json
+import re
+from pathlib import Path
+
+from video_chunker.models import ChunkRecord, CutError
+
+
+def chunk_filename(source: Path, index: int) -&gt; str:
+    if "," in source.stem:
+        raise CutError(f"{source.name} has a comma in its name; rename it before chunking")
+    return f"{source.stem}_{index:04d}.mp4"
+
+
+def chunk_path(output_dir: Path, source: Path, index: int) -&gt; Path:
+    return output_dir / chunk_filename(source, index)
+
+
+def manifest_path(output_dir: Path, source: Path) -&gt; Path:
+    if "," in source.stem:
+        raise CutError(f"{source.name} has a comma in its name; rename it before chunking")
+    return output_dir / f"{source.stem}.chunks.json"
+
+
+def existing_chunk_paths(output_dir: Path, source: Path) -&gt; list[Path]:
+    if not output_dir.is_dir():
+        return []
+    pattern = re.compile(rf"^{re.escape(source.stem)}_\d{{4}}\.mp4$")
+    return sorted(p for p in output_dir.iterdir() if p.is_file() and pattern.match(p.name))
+
+
+def prepare_output_dir(output_dir: Path, source: Path, *, overwrite: bool) -&gt; None:
+    if output_dir.exists() and not output_dir.is_dir():
+        raise CutError(f"{output_dir} is not a directory")
+    existing = existing_chunk_paths(output_dir, source)
+    manifest = output_dir / f"{source.stem}.chunks.json" if output_dir.is_dir() else None
+    if existing and not overwrite:
+        raise CutError(
+            f"{existing[0].name} already exists in {output_dir}; "
+            f"pass --overwrite to replace chunks for {source.stem}"
+        )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if overwrite:
+        for path in existing:
+            path.unlink()
+        if manifest is not None and manifest.exists():
+            manifest.unlink()
+
+
+def write_manifest(
+    output_dir: Path,
+    source: Path,
+    chunk_s: float,
+    mode: str,
+    chunks: list[ChunkRecord],
+) -&gt; Path:
+    path = manifest_path(output_dir, source)
+    payload = {
+        "source": str(source.resolve()),
+        "chunk_s": chunk_s,
+        "mode": mode,
+        "chunks": [
+            {
+                "index": chunk.index,
+                "file": chunk.path.name,
+                "path": str(chunk.path.resolve()),
+                "start_s": chunk.start_s,
+                "end_s": chunk.end_s,
+            }
+            for chunk in chunks
+        ],
+    }
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+    return path</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="3-4" aria-label="Task 3 step 4">
+            <div>
+              <p><strong>Step 4: Run the test to verify it passes</strong></p>
+              <pre><code>pytest tests/test_output.py -v</code></pre>
+              <p>Expected: 6 passed.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="3-5" aria-label="Task 3 step 5">
+            <div>
+              <p><strong>Step 5: Commit</strong></p>
+              <pre><code>git add src/video_chunker/output.py tests/test_output.py
+git commit -m "feat: name chunk files and write a manifest"</code></pre>
+            </div>
+          </div>
+        </article>
+
+        <article class="task" id="task-4">
+          <h3>Task 4: ffmpeg command and fast-mode policy</h3>
+          <p><strong>Files:</strong> create <code>src/video_chunker/cut.py</code>, <code>tests/test_cut_command.py</code>.</p>
+          <p><strong>Consumes:</strong> <code>MediaInfo</code>, <code>MODE_EXACT</code>, <code>MODE_FAST</code>, <code>CutError</code>.</p>
+          <p><strong>Produces:</strong> <code>assert_fast_mode_compatible(info: MediaInfo) -&gt; None</code>, <code>build_ffmpeg_command(...) -&gt; list[str]</code>.</p>
+
+          <div class="step">
+            <input type="checkbox" data-step="4-1" aria-label="Task 4 step 1">
+            <div>
+              <p><strong>Step 1: Write the failing test</strong></p>
+              <pre><code># tests/test_cut_command.py
+from pathlib import Path
+
+import pytest
+
+from video_chunker.cut import assert_fast_mode_compatible, build_ffmpeg_command
+from video_chunker.models import CutError, MediaInfo
+
+
+def _info(**overrides) -&gt; MediaInfo:
+    base = dict(
+        path=Path("clip.mp4"),
+        duration_s=62.0,
+        video_codec="h264",
+        audio_codec="aac",
+        format_name="mp4",
+        frame_rate=25.0,
+    )
+    base.update(overrides)
+    return MediaInfo(**base)
+
+
+def test_exact_command_reencodes_h264_aac():
+    cmd = build_ffmpeg_command(
+        ffmpeg_bin="ffmpeg",
+        source=Path("holiday.mp4"),
+        output_pattern=Path("out/holiday_%04d.mp4"),
+        chunk_s=15,
+        mode="exact",
+        has_audio=True,
+    )
+    assert cmd[:4] == ["ffmpeg", "-hide_banner", "-loglevel", "error"]
+    assert "-c" not in cmd or cmd[cmd.index("-c:v") + 1] == "libx264"
+    assert "copy" not in cmd
+    assert "-map" in cmd and "0:a:0" in cmd
+    assert cmd[-1] == "out/holiday_%04d.mp4"
+    assert cmd[cmd.index("-segment_time") + 1] == "15.000000"
+
+
+def test_exact_command_omits_audio_when_absent():
+    cmd = build_ffmpeg_command(
+        ffmpeg_bin="ffmpeg",
+        source=Path("silent.mp4"),
+        output_pattern=Path("out/silent_%04d.mp4"),
+        chunk_s=15,
+        mode="exact",
+        has_audio=False,
+    )
+    assert "0:a:0" not in cmd
+    assert "aac" not in cmd
+
+
+def test_fast_command_copies_packets():
+    cmd = build_ffmpeg_command(
+        ffmpeg_bin="/usr/local/bin/ffmpeg",
+        source=Path("holiday.mp4"),
+        output_pattern=Path("out/holiday_%04d.mp4"),
+        chunk_s=15,
+        mode="fast",
+        has_audio=True,
+    )
+    assert cmd[0] == "/usr/local/bin/ffmpeg"
+    assert cmd[cmd.index("-c") + 1] == "copy"
+    assert "libx264" not in cmd
+
+
+def test_fast_mode_rejects_vp9():
+    with pytest.raises(CutError, match="vp9"):
+        assert_fast_mode_compatible(_info(video_codec="vp9"))
+
+
+def test_fast_mode_rejects_vorbis_audio():
+    with pytest.raises(CutError, match="vorbis"):
+        assert_fast_mode_compatible(_info(audio_codec="vorbis"))
+
+
+def test_fast_mode_allows_silent_h264():
+    assert_fast_mode_compatible(_info(audio_codec=None))
+
+
+def test_unknown_mode_is_rejected():
+    with pytest.raises(CutError, match="unknown mode"):
+        build_ffmpeg_command(
+            ffmpeg_bin="ffmpeg",
+            source=Path("a.mp4"),
+            output_pattern=Path("out/a_%04d.mp4"),
+            chunk_s=15,
+            mode="fancy",
+            has_audio=False,
+        )</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="4-2" aria-label="Task 4 step 2">
+            <div>
+              <p><strong>Step 2: Run the test to verify it fails</strong></p>
+              <pre><code>pytest tests/test_cut_command.py -v</code></pre>
+              <p>Expected: import error for <code>video_chunker.cut</code>.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="4-3" aria-label="Task 4 step 3">
+            <div>
+              <p><strong>Step 3: Write the minimal implementation</strong></p>
+              <pre><code># src/video_chunker/cut.py
+from pathlib import Path
+
+from video_chunker.models import (
+    MODE_EXACT,
+    MODE_FAST,
+    CutError,
+    MediaInfo,
+)
+
+FAST_VIDEO = {"h264", "hevc", "mpeg4"}
+FAST_AUDIO = {"aac", "mp3", "ac3"}
+EXACT_VIDEO_ARGS = [
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+]
+EXACT_AUDIO_ARGS = ["-c:a", "aac", "-b:a", "128k"]
+
+
+def assert_fast_mode_compatible(info: MediaInfo) -&gt; None:
+    if info.video_codec not in FAST_VIDEO:
+        raise CutError(
+            f"fast mode cannot copy video codec {info.video_codec} into mp4; use --mode exact"
+        )
+    if info.audio_codec is not None and info.audio_codec not in FAST_AUDIO:
+        raise CutError(
+            f"fast mode cannot copy audio codec {info.audio_codec} into mp4; use --mode exact"
+        )
+
+
+def build_ffmpeg_command(
+    *,
+    ffmpeg_bin: str,
+    source: Path,
+    output_pattern: Path,
+    chunk_s: float,
+    mode: str,
+    has_audio: bool,
+) -&gt; list[str]:
+    cmd = [
+        ffmpeg_bin,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        str(source),
+        "-map",
+        "0:v:0",
+    ]
+    if has_audio:
+        cmd.extend(["-map", "0:a:0"])
+    cmd.extend([
+        "-f",
+        "segment",
+        "-segment_time",
+        f"{chunk_s:.6f}",
+        "-reset_timestamps",
+        "1",
+    ])
+    if mode == MODE_EXACT:
+        cmd.extend(EXACT_VIDEO_ARGS)
+        if has_audio:
+            cmd.extend(EXACT_AUDIO_ARGS)
+    elif mode == MODE_FAST:
+        cmd.extend(["-c", "copy"])
+    else:
+        raise CutError(f"unknown mode {mode}")
+    cmd.append(str(output_pattern))
+    return cmd</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="4-4" aria-label="Task 4 step 4">
+            <div>
+              <p><strong>Step 4: Run the test to verify it passes</strong></p>
+              <pre><code>pytest tests/test_cut_command.py -v</code></pre>
+              <p>Expected: 7 passed.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="4-5" aria-label="Task 4 step 5">
+            <div>
+              <p><strong>Step 5: Commit</strong></p>
+              <pre><code>git add src/video_chunker/cut.py tests/test_cut_command.py
+git commit -m "feat: build exact and fast ffmpeg cut commands"</code></pre>
+            </div>
+          </div>
+        </article>
+
+        <article class="task" id="task-5">
+          <h3>Task 5: End-to-end cut</h3>
+          <p><strong>Files:</strong> modify <code>src/video_chunker/cut.py</code>, <code>src/video_chunker/__init__.py</code>. Create <code>tests/conftest.py</code>, <code>tests/test_chunk_video.py</code>.</p>
+          <p><strong>Consumes:</strong> <code>probe_media</code>, <code>plan_segments</code>, <code>duration_tolerance_s</code>, <code>prepare_output_dir</code>, <code>existing_chunk_paths</code>, <code>write_manifest</code>, <code>build_ffmpeg_command</code>, <code>assert_fast_mode_compatible</code>, <code>chunk_path</code>.</p>
+          <p><strong>Produces:</strong> <code>chunk_video(source, output_dir, *, chunk_s=15.0, mode="exact", overwrite=False, ffmpeg_bin="ffmpeg", ffprobe_bin="ffprobe") -&gt; list[ChunkRecord]</code>. Failures after ffmpeg starts raise <code>CutFailed</code>. Earlier refusals stay <code>CutError</code>.</p>
+
+          <div class="step">
+            <input type="checkbox" data-step="5-1" aria-label="Task 5 step 1">
+            <div>
+              <p><strong>Step 1: Write the failing test</strong></p>
+              <pre><code># tests/conftest.py
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+
+def ffmpeg_available() -&gt; bool:
+    return shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+
+
+def make_sample(path: Path, duration: float) -&gt; None:
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", f"testsrc=size=160x120:rate=25:duration={duration}",
+            "-f", "lavfi", "-i", f"sine=frequency=440:sample_rate=44100:duration={duration}",
+            "-shortest",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            str(path),
+        ],
+        check=True,
+    )
+
+
+requires_ffmpeg = pytest.mark.skipif(
+    not ffmpeg_available(),
+    reason="ffmpeg and ffprobe are required",
+)</code></pre>
+              <pre><code># tests/test_chunk_video.py
+import json
+from pathlib import Path
+
+import pytest
+
+from tests.conftest import make_sample, requires_ffmpeg
+from video_chunker.cut import chunk_video
+from video_chunker.models import CutError, MediaInfo
+from video_chunker.probe import probe_media
+
+
+@requires_ffmpeg
+def test_exact_chunks_match_duration(tmp_path):
+    source = tmp_path / "clip.mp4"
+    make_sample(source, 2.0)
+    out = tmp_path / "out"
+    chunks = chunk_video(source, out, chunk_s=0.5, mode="exact")
+    assert [c.path.name for c in chunks] == [
+        "clip_0000.mp4",
+        "clip_0001.mp4",
+        "clip_0002.mp4",
+        "clip_0003.mp4",
+    ]
+    measured = [probe_media(c.path).duration_s for c in chunks]
+    for seconds in measured:
+        assert seconds == pytest.approx(0.5, abs=0.08)
+    manifest = json.loads((out / "clip.chunks.json").read_text(encoding="utf-8"))
+    assert manifest["mode"] == "exact"
+    assert manifest["chunk_s"] == 0.5
+
+
+@requires_ffmpeg
+def test_short_video_writes_one_file(tmp_path):
+    source = tmp_path / "short.mp4"
+    make_sample(source, 2.0)
+    chunks = chunk_video(source, tmp_path / "out", chunk_s=15, mode="exact")
+    assert len(chunks) == 1
+    assert probe_media(chunks[0].path).duration_s == pytest.approx(2.0, abs=0.08)
+
+
+@requires_ffmpeg
+def test_remainder_chunk_is_kept(tmp_path):
+    source = tmp_path / "tail.mp4"
+    make_sample(source, 2.2)
+    chunks = chunk_video(source, tmp_path / "out", chunk_s=1.0, mode="exact")
+    assert len(chunks) == 3
+    assert probe_media(chunks[-1].path).duration_s == pytest.approx(0.2, abs=0.08)
+
+
+@requires_ffmpeg
+def test_second_run_without_overwrite_keeps_bytes(tmp_path):
+    source = tmp_path / "clip.mp4"
+    make_sample(source, 2.0)
+    out = tmp_path / "out"
+    first = chunk_video(source, out, chunk_s=0.5, mode="exact")
+    original = first[0].path.read_bytes()
+    with pytest.raises(CutError, match="already exists"):
+        chunk_video(source, out, chunk_s=0.5, mode="exact")
+    assert first[0].path.read_bytes() == original
+
+
+@requires_ffmpeg
+def test_overwrite_removes_stale_higher_indexes(tmp_path):
+    source = tmp_path / "clip.mp4"
+    make_sample(source, 2.0)
+    out = tmp_path / "out"
+    chunk_video(source, out, chunk_s=0.5, mode="exact")
+    chunk_video(source, out, chunk_s=15, mode="exact", overwrite=True)
+    names = sorted(p.name for p in out.glob("clip_*.mp4"))
+    assert names == ["clip_0000.mp4"]
+
+
+def test_chunk_video_fast_reject_writes_nothing(tmp_path, monkeypatch):
+    source = tmp_path / "film.webm"
+    source.write_bytes(b"fake")
+    info = MediaInfo(
+        path=source,
+        duration_s=10.0,
+        video_codec="vp9",
+        audio_codec="opus",
+        format_name="webm",
+        frame_rate=25.0,
+    )
+    monkeypatch.setattr("video_chunker.cut.probe_media", lambda *args, **kwargs: info)
+    out = tmp_path / "out"
+    with pytest.raises(CutError, match="vp9"):
+        chunk_video(source, out, chunk_s=15, mode="fast")
+    assert list(out.glob("*.mp4")) == [] if out.exists() else True
+
+
+def test_chunk_video_rejects_tiny_duration(tmp_path, monkeypatch):
+    source = tmp_path / "clip.mp4"
+    source.write_bytes(b"fake")
+    info = MediaInfo(source, 10.0, "h264", "aac", "mp4", 25.0)
+    monkeypatch.setattr("video_chunker.cut.probe_media", lambda *args, **kwargs: info)
+    with pytest.raises(CutError, match="one frame"):
+        chunk_video(source, tmp_path / "out", chunk_s=0.01, mode="exact")
+
+
+def test_chunk_video_rejects_too_many_chunks(tmp_path, monkeypatch):
+    source = tmp_path / "clip.mp4"
+    source.write_bytes(b"fake")
+    info = MediaInfo(source, 10_001.0, "h264", "aac", "mp4", 25.0)
+    monkeypatch.setattr("video_chunker.cut.probe_media", lambda *args, **kwargs: info)
+    with pytest.raises(CutError, match="10000"):
+        chunk_video(source, tmp_path / "out", chunk_s=1.0, mode="exact")</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="5-2" aria-label="Task 5 step 2">
+            <div>
+              <p><strong>Step 2: Run the test to verify it fails</strong></p>
+              <pre><code>pytest tests/test_chunk_video.py -v</code></pre>
+              <p>Expected: <code>chunk_video</code> is not defined. Integration tests skip when ffmpeg is absent; the three monkeypatched tests still run.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="5-3" aria-label="Task 5 step 3">
+            <div>
+              <p><strong>Step 3: Write the minimal implementation</strong></p>
+              <p>Add these imports to the Task 4 imports in <code>cut.py</code>: <code>subprocess</code>, <code>chunk_filename</code>, <code>existing_chunk_paths</code>, <code>prepare_output_dir</code>, <code>write_manifest</code>, <code>duration_tolerance_s</code>, <code>plan_segments</code>, <code>probe_media</code>, and <code>ChunkRecord</code>, <code>CutFailed</code> from models. Then add the functions below. <code>_assign_times</code> receives the source frame rate so each output file is probed once.</p>
+              <pre><code>def _assign_times(paths, segments, mode, ffprobe_bin, frame_rate):
+    records = []
+    cursor = 0.0
+    tolerance = duration_tolerance_s(frame_rate)
+    for index, path in enumerate(paths):
+        measured = probe_media(path, ffprobe_bin=ffprobe_bin).duration_s
+        if mode == MODE_FAST:
+            start = cursor
+            end = cursor + measured
+            cursor = end
+        else:
+            start = segments[index].start_s
+            end = segments[index].end_s
+            if abs(measured - (end - start)) &gt; tolerance:
+                raise CutFailed(
+                    f"{path.name} is {measured:.3f}s; planned {(end - start):.3f}s"
+                )
+        records.append(ChunkRecord(index, path, start, end))
+    return records
+
+
+def chunk_video(
+    source: Path,
+    output_dir: Path,
+    *,
+    chunk_s: float = 15.0,
+    mode: str = MODE_EXACT,
+    overwrite: bool = False,
+    ffmpeg_bin: str = "ffmpeg",
+    ffprobe_bin: str = "ffprobe",
+) -&gt; list[ChunkRecord]:
+    if not source.is_file():
+        raise CutError(f"{source} is not a file")
+    chunk_filename(source, 0)
+    info = probe_media(source, ffprobe_bin=ffprobe_bin)
+    if chunk_s &lt; (1.0 / info.frame_rate):
+        raise CutError(
+            f"chunk duration {chunk_s}s is shorter than one frame "
+            f"({1.0 / info.frame_rate:.4f}s)"
+        )
+    if info.duration_s / chunk_s &gt; 10_000:
+        raise CutError("chunk duration would create more than 10000 files")
+    if mode == MODE_FAST:
+        assert_fast_mode_compatible(info)
+    elif mode != MODE_EXACT:
+        raise CutError(f"unknown mode {mode}")
+    segments = plan_segments(
+        info.duration_s,
+        chunk_s,
+        min_tail_s=1.0 / info.frame_rate,
+    )
+    prepare_output_dir(output_dir, source, overwrite=overwrite)
+    pattern = output_dir / f"{source.stem}_%04d.mp4"
+    cmd = build_ffmpeg_command(
+        ffmpeg_bin=ffmpeg_bin,
+        source=source,
+        output_pattern=pattern,
+        chunk_s=chunk_s,
+        mode=mode,
+        has_audio=info.audio_codec is not None,
+    )
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "ffmpeg failed"
+        raise CutFailed(detail)
+    paths = existing_chunk_paths(output_dir, source)
+    if mode == MODE_EXACT and len(paths) != len(segments):
+        raise CutFailed(f"expected {len(segments)} chunks, found {len(paths)}")
+    if not paths:
+        raise CutFailed("ffmpeg produced no chunks")
+    records = _assign_times(paths, segments, mode, ffprobe_bin, info.frame_rate)
+    if mode == MODE_FAST:
+        total = sum(record.end_s - record.start_s for record in records)
+        if abs(total - info.duration_s) &gt; 0.5:
+            raise CutFailed(
+                f"fast mode duration {total:.3f}s is far from source {info.duration_s:.3f}s"
+            )
+    write_manifest(output_dir, source, chunk_s, mode, records)
+    return records</code></pre>
+              <pre><code># src/video_chunker/__init__.py
+from video_chunker.cut import chunk_video
+
+__all__ = ["chunk_video"]</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="5-4" aria-label="Task 5 step 4">
+            <div>
+              <p><strong>Step 4: Run the test to verify it passes</strong></p>
+              <pre><code>pytest tests/test_chunk_video.py -v</code></pre>
+              <p>Expected: 8 passed when ffmpeg is installed. Without ffmpeg, 3 passed and 5 skipped.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="5-5" aria-label="Task 5 step 5">
+            <div>
+              <p><strong>Step 5: Commit</strong></p>
+              <pre><code>git add src/video_chunker/cut.py src/video_chunker/__init__.py \
+  tests/conftest.py tests/test_chunk_video.py
+git commit -m "feat: cut a video into timed mp4 chunks"</code></pre>
+            </div>
+          </div>
+        </article>
+
+        <article class="task" id="task-6">
+          <h3>Task 6: Command line</h3>
+          <p><strong>Files:</strong> create <code>src/video_chunker/cli.py</code>, <code>src/video_chunker/__main__.py</code>, <code>tests/test_cli.py</code>, <code>README.md</code>.</p>
+          <p><strong>Consumes:</strong> <code>chunk_video</code>, <code>CutError</code>, <code>ProbeError</code>, <code>MODES</code>.</p>
+          <p><strong>Produces:</strong> <code>resolve_bin(explicit: str | None, name: str) -&gt; str</code>, <code>main(argv: list[str] | None = None) -&gt; int</code>.</p>
+
+          <div class="step">
+            <input type="checkbox" data-step="6-1" aria-label="Task 6 step 1">
+            <div>
+              <p><strong>Step 1: Write the failing test</strong></p>
+              <pre><code># tests/test_cli.py
+from pathlib import Path
+
+import pytest
+
+from video_chunker.cli import main
+from video_chunker.models import ChunkRecord, CutError, CutFailed
+
+
+def test_cli_rejects_non_positive_duration(capsys):
+    code = main(["clip.mp4", "--duration", "0"])
+    assert code == 2
+    assert "duration" in capsys.readouterr().err
+
+
+def test_cli_rejects_unknown_mode(capsys):
+    code = main(["clip.mp4", "--mode", "fancy"])
+    assert code == 2
+    assert "mode" in capsys.readouterr().err
+
+
+def test_cli_missing_file(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("video_chunker.cli.resolve_bin", lambda explicit, name: name)
+    missing = tmp_path / "missing.mp4"
+    code = main([str(missing), "--output", str(tmp_path / "out")])
+    assert code == 2
+    assert "not a file" in capsys.readouterr().err
+
+
+def test_cli_missing_binary_creates_nothing(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "clip.mp4"
+    source.write_bytes(b"x")
+    out = tmp_path / "out"
+
+    def missing(explicit, name):
+        raise CutError(f"{name} not found. Install ffmpeg 5 or newer, or pass --{name}.")
+
+    monkeypatch.setattr("video_chunker.cli.resolve_bin", missing)
+    code = main([str(source), "--output", str(out)])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "ffmpeg" in err or "ffprobe" in err
+    assert list(out.glob("*.mp4")) == [] if out.exists() else True
+
+
+def test_cli_prints_chunk_paths(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "clip.mp4"
+    source.write_bytes(b"x")
+    out = tmp_path / "out"
+    monkeypatch.setattr("video_chunker.cli.resolve_bin", lambda explicit, name: name)
+
+    def fake_chunk(source, output_dir, **kwargs):
+        output_dir.mkdir(parents=True, exist_ok=True)
+        path = output_dir / "clip_0000.mp4"
+        path.write_bytes(b"chunk")
+        return [ChunkRecord(0, path, 0.0, 15.0)]
+
+    monkeypatch.setattr("video_chunker.cli.chunk_video", fake_chunk)
+    code = main([str(source), "--output", str(out), "--duration", "15"])
+    assert code == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert lines == [str((out / "clip_0000.mp4").resolve())]
+
+
+def test_cli_cut_error_is_exit_1(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "clip.mp4"
+    source.write_bytes(b"x")
+    monkeypatch.setattr("video_chunker.cli.resolve_bin", lambda explicit, name: name)
+
+    def boom(*args, **kwargs):
+        raise CutFailed("ffmpeg failed")
+
+    monkeypatch.setattr("video_chunker.cli.chunk_video", boom)
+    code = main([str(source), "--output", str(tmp_path / "out")])
+    assert code == 1
+    assert "ffmpeg failed" in capsys.readouterr().err</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="6-2" aria-label="Task 6 step 2">
+            <div>
+              <p><strong>Step 2: Run the test to verify it fails</strong></p>
+              <pre><code>pytest tests/test_cli.py -v</code></pre>
+              <p>Expected: import error for <code>video_chunker.cli</code>.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="6-3" aria-label="Task 6 step 3">
+            <div>
+              <p><strong>Step 3: Write the minimal implementation</strong></p>
+              <pre><code># src/video_chunker/cli.py
+import argparse
+import os
+import shutil
+import sys
+from pathlib import Path
+
+from video_chunker.cut import chunk_video
+from video_chunker.models import MODES, CutError, CutFailed, ProbeError
+
+
+def resolve_bin(explicit: str | None, name: str) -&gt; str:
+    if explicit:
+        candidate = Path(explicit)
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+        raise CutError(f"{name} not executable: {explicit}")
+    found = shutil.which(name)
+    if not found:
+        raise CutError(
+            f"{name} not found. Install ffmpeg 5 or newer, or pass --{name}."
+        )
+    return found
+
+
+def main(argv: list[str] | None = None) -&gt; int:
+    parser = argparse.ArgumentParser(
+        prog="video-chunker",
+        description="Cut a video into timed MP4 chunks.",
+    )
+    parser.add_argument("input", type=Path)
+    parser.add_argument("--duration", type=float, default=15.0)
+    parser.add_argument("--output", type=Path, default=Path("chunks"))
+    parser.add_argument("--mode", choices=MODES, default="exact")
+    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--ffmpeg", default=None)
+    parser.add_argument("--ffprobe", default=None)
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        return int(exc.code) if exc.code is not None else 2
+    if args.duration &lt;= 0:
+        print("duration must be &gt; 0 seconds", file=sys.stderr)
+        return 2
+    try:
+        ffmpeg_bin = resolve_bin(args.ffmpeg, "ffmpeg")
+        ffprobe_bin = resolve_bin(args.ffprobe, "ffprobe")
+        if not args.input.is_file():
+            raise CutError(f"{args.input} is not a file")
+        chunks = chunk_video(
+            args.input,
+            args.output,
+            chunk_s=args.duration,
+            mode=args.mode,
+            overwrite=args.overwrite,
+            ffmpeg_bin=ffmpeg_bin,
+            ffprobe_bin=ffprobe_bin,
+        )
+    except CutFailed as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except (CutError, ProbeError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    for chunk in chunks:
+        print(chunk.path.resolve())
+    return 0</code></pre>
+              <p><code>CutFailed</code> is a subclass of <code>CutError</code>, so the <code>CutFailed</code> handler has to come first. Validation stays on exit 2. A failed encode or a chunk that misses the plan stays on exit 1.</p>
+              <pre><code># src/video_chunker/__main__.py
+import sys
+
+from video_chunker.cli import main
+
+if __name__ == "__main__":
+    sys.exit(main())</code></pre>
+              <pre><code># README.md
+# video-chunker
+
+Cut one local video into MP4 pieces of a chosen length.
+
+## Install
+
+ffmpeg 5 or newer is required (`brew install ffmpeg` on macOS).
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+## Use
+
+```bash
+video-chunker holiday.mp4 --duration 15 --output ./chunks
+```
+
+That writes `chunks/holiday_0000.mp4`, then `holiday_0001.mp4`, and so on,
+plus `chunks/holiday.chunks.json`. The last file holds any remainder.
+
+`--mode fast` copies packets and can cut on a later keyframe.
+`--overwrite` replaces previous chunks for the same file name.
+
+Stdout prints one absolute chunk path per line.
+
+| Exit | Meaning |
+| --- | --- |
+| 0 | Chunks and the manifest are written. |
+| 2 | Bad arguments, missing binary, unreadable media, or existing files. |
+| 1 | ffmpeg failed, or a chunk length did not match the plan. |
+
+## Test
+
+```bash
+pytest -v
+```
+</code></pre>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="6-4" aria-label="Task 6 step 4">
+            <div>
+              <p><strong>Step 4: Run the tests to verify they pass</strong></p>
+              <pre><code>pytest -v
+python -m video_chunker --help</code></pre>
+              <p>Expected: the full suite passes, and help lists <code>--duration</code>, <code>--output</code>, <code>--mode</code>, and <code>--overwrite</code>.</p>
+            </div>
+          </div>
+
+          <div class="step">
+            <input type="checkbox" data-step="6-5" aria-label="Task 6 step 5">
+            <div>
+              <p><strong>Step 5: Commit</strong></p>
+              <pre><code>git add src/video_chunker/cli.py src/video_chunker/__main__.py \
+  src/video_chunker/models.py src/video_chunker/cut.py tests/test_cli.py README.md
+git commit -m "feat: add the video-chunker command"</code></pre>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <hr class="cut">
+      <section id="left-out">
+        <h2>Left for later</h2>
+        <ul>
+          <li>An HTTP upload service.</li>
+          <li>A watched folder.</li>
+          <li>Overlap between chunks.</li>
+          <li>Chunking by file size in bytes.</li>
+          <li>Choosing among several audio or video streams. The first stream of each kind is the one that is kept.</li>
+          <li>Burning subtitles, scaling, or cropping.</li>
+        </ul>
+      </section>
+
+      <hr class="cut">
+      <section id="check">
+        <h2>Self-check</h2>
+        <ul>
+          <li>Configurable duration, local output, and a single video input each have a task.</li>
+          <li>Exact and fast modes, the short last chunk, overwrite, and the manifest are specified with tests.</li>
+          <li>Signatures in the contracts section match the code in Tasks 1 through 6, including <code>CutFailed</code>.</li>
+          <li>Each output file is probed once. Exit 1 is the <code>CutFailed</code> type, and exit 2 is <code>CutError</code> or <code>ProbeError</code>.</li>
+        </ul>
+      </section>
+    </article>
+  </div>
+  <script>
+    const key = "video-chunker-plan-checks";
+    const boxes = document.querySelectorAll("input[type=checkbox][data-step]");
+    let saved = {};
+    try {
+      saved = JSON.parse(localStorage.getItem(key) || "{}");
+    } catch (err) {
+      saved = {};
+    }
+    boxes.forEach((box) => {
+      box.checked = Boolean(saved[box.dataset.step]);
+      box.addEventListener("change", () => {
+        saved[box.dataset.step] = box.checked;
+        localStorage.setItem(key, JSON.stringify(saved));
+      });
+    });
+  </script>
+</body>
+</html>
