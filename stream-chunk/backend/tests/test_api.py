@@ -14,6 +14,9 @@ from tests.conftest import generate_clip, post_media, probe_duration
 _ID_RE = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}_[0-9a-f]{6}$"
 )
+_CHUNK_NAME = re.compile(
+    r"^(?P<stamp>[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2})_(?P<seq>[0-9]{3})\.mp4$"
+)
 
 
 def _create(client, **payload):
@@ -27,10 +30,22 @@ def _session_dir(data_root: Path, session_id: str) -> Path:
 
 
 def _chunk_mp4s(data_root: Path, session_id: str) -> list[Path]:
-    chunks = _session_dir(data_root, session_id) / "chunks"
-    if not chunks.is_dir():
+    manifest_file = _session_dir(data_root, session_id) / "chunks" / "session.chunks.json"
+    if not manifest_file.is_file():
         return []
-    return sorted(chunks.glob("session_*.mp4"))
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    folder = data_root / "chunks"
+    paths = [folder / row["file"] for row in manifest["chunks"]]
+    assert all(path.is_file() for path in paths)
+    assert list((_session_dir(data_root, session_id) / "chunks").glob("*.mp4")) == []
+    return paths
+
+
+def _assert_timestamp_names(names: list[str]) -> None:
+    assert names
+    assert all(_CHUNK_NAME.fullmatch(name) for name in names)
+    assert names == sorted(names)
+    assert len(set(names)) == len(names)
 
 
 def test_health_reports_local_tools(client):
@@ -165,14 +180,15 @@ def test_slack_keeps_a_15_3_second_clip_as_one_file(client, data_root, tmp_path)
     chunk = body["chunks"][0]
     assert set(chunk) == {"index", "file", "start_s", "end_s", "bytes", "gap_before_s"}
     assert chunk["index"] == 0
-    assert chunk["file"] == "session_0000.mp4"
+    _assert_timestamp_names([chunk["file"]])
     assert chunk["start_s"] == pytest.approx(0)
     assert chunk["end_s"] == pytest.approx(body["probed_duration_s"])
     assert chunk["gap_before_s"] == 0
     assert chunk["bytes"] > 0
 
     stored = _chunk_mp4s(data_root, session_id)
-    assert [path.name for path in stored] == ["session_0000.mp4"]
+    assert [path.name for path in stored] == [chunk["file"]]
+    assert stored[0].parent == data_root / "chunks"
     assert stored[0].stat().st_size == chunk["bytes"]
     manifest = json.loads(
         (_session_dir(data_root, session_id) / "chunks" / "session.chunks.json").read_text()
@@ -196,12 +212,10 @@ def test_long_clip_splits_into_four_files(client, data_root, tmp_path):
     body = response.json()
     assert body["split"] is True
     chunks = body["chunks"]
-    assert [row["file"] for row in chunks] == [
-        "session_0000.mp4",
-        "session_0001.mp4",
-        "session_0002.mp4",
-        "session_0003.mp4",
-    ]
+    names = [row["file"] for row in chunks]
+    _assert_timestamp_names(names)
+    stamp = _CHUNK_NAME.fullmatch(names[0]).group("stamp")
+    assert names == [f"{stamp}_{index:03d}.mp4" for index in range(1, 5)]
     assert [row["index"] for row in chunks] == [0, 1, 2, 3]
     assert chunks[0]["start_s"] == pytest.approx(0)
     assert chunks[0]["end_s"] == pytest.approx(15)
@@ -229,18 +243,14 @@ def test_long_clip_splits_into_four_files(client, data_root, tmp_path):
         assert stored_row["gap_before_s"] == 0
         assert stored_row["bytes"] == response_row["bytes"]
     assert manifest["chunks"][-1]["end_s"] == pytest.approx(duration, abs=0.05)
-    assert [path.name for path in _chunk_mp4s(data_root, session_id)] == [
-        "session_0000.mp4",
-        "session_0001.mp4",
-        "session_0002.mp4",
-        "session_0003.mp4",
-    ]
+    assert [path.name for path in _chunk_mp4s(data_root, session_id)] == names
+    assert {path.parent for path in _chunk_mp4s(data_root, session_id)} == {data_root / "chunks"}
 
     listed = client.get(f"/api/sessions/{session_id}")
     assert listed.status_code == 200
     assert listed.json()["chunks"] == manifest["chunks"]
 
-    download = client.get(f"/api/sessions/{session_id}/chunks/session_0000.mp4")
+    download = client.get(f"/api/sessions/{session_id}/chunks/{chunks[0]['file']}")
     assert download.status_code == 200
     assert download.headers["content-type"].startswith("video/mp4")
     assert download.content[4:8] == b"ftyp"
@@ -271,7 +281,7 @@ def test_two_posts_get_contiguous_indexes(client, data_root, tmp_path):
     assert first.status_code == 200, first.text
     first_body = first.json()
     assert first_body["split"] is False
-    assert first_body["chunks"][0]["file"] == "session_0000.mp4"
+    _assert_timestamp_names([first_body["chunks"][0]["file"]])
     assert first_body["chunks"][0]["index"] == 0
     assert first_body["window_index"] == 0
 
@@ -280,7 +290,7 @@ def test_two_posts_get_contiguous_indexes(client, data_root, tmp_path):
     second_body = second.json()
     assert second_body["split"] is False
     assert second_body["window_index"] == 1
-    assert second_body["chunks"][0]["file"] == "session_0001.mp4"
+    _assert_timestamp_names([first_body["chunks"][0]["file"], second_body["chunks"][0]["file"]])
     assert second_body["chunks"][0]["index"] == 1
     assert second_body["chunks"][0]["start_s"] == pytest.approx(first_body["chunks"][0]["end_s"])
     assert second_body["chunks"][0]["gap_before_s"] == pytest.approx(0.4)
@@ -288,15 +298,35 @@ def test_two_posts_get_contiguous_indexes(client, data_root, tmp_path):
     manifest = json.loads(
         (_session_dir(data_root, session_id) / "chunks" / "session.chunks.json").read_text()
     )
-    assert [row["file"] for row in manifest["chunks"]] == ["session_0000.mp4", "session_0001.mp4"]
+    assert [row["file"] for row in manifest["chunks"]] == [
+        first_body["chunks"][0]["file"],
+        second_body["chunks"][0]["file"],
+    ]
     assert manifest["chunks"][0]["window_index"] == 0
     assert manifest["chunks"][0]["gap_before_s"] == 0
     assert manifest["chunks"][1]["window_index"] == 1
     assert manifest["chunks"][1]["gap_before_s"] == pytest.approx(0.4)
     assert [path.name for path in _chunk_mp4s(data_root, session_id)] == [
-        "session_0000.mp4",
-        "session_0001.mp4",
+        first_body["chunks"][0]["file"],
+        second_body["chunks"][0]["file"],
     ]
+    assert {path.parent for path in _chunk_mp4s(data_root, session_id)} == {data_root / "chunks"}
+
+
+def test_later_sessions_keep_adding_to_the_same_folder(client, data_root, tmp_path):
+    clip = tmp_path / "piece.mp4"
+    generate_clip(clip, 1.0)
+    first_id = _create(client, chunk_duration_s=15)["id"]
+    second_id = _create(client, chunk_duration_s=15)["id"]
+    first = post_media(client, first_id, clip)
+    second = post_media(client, second_id, clip)
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    names = [first.json()["chunks"][0]["file"], second.json()["chunks"][0]["file"]]
+    _assert_timestamp_names(names)
+    stored = sorted((data_root / "chunks").glob("*.mp4"))
+    assert [path.name for path in stored] == names
+    assert _chunk_mp4s(data_root, first_id)[0].parent == _chunk_mp4s(data_root, second_id)[0].parent
 
 
 def test_status_is_cutting_while_media_is_processed(client, data_root, tmp_path, monkeypatch):

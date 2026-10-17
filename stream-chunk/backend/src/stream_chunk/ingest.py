@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from stream_chunk.sessions import atomic_write_json
+from stream_chunk.sessions import atomic_write_json, reserved_chunk_paths
 
 _WINDOW_NAME = re.compile(r"^window_(\d{4})\.[^.]+$")
 
@@ -112,15 +112,6 @@ def _fail_from_chunker(exc: Exception, probe_error: type, cut_error: type, cut_f
     raise MediaFailed("cut_failed", _detail(exc)) from exc
 
 
-def _next_session_index(chunks_dir: Path, used: set[int], start: int) -> int:
-    index = start
-    while index in used or (chunks_dir / f"session_{index:04d}.mp4").exists():
-        index += 1
-        if index > 9999:
-            raise MediaFailed("cut_failed", "session has too many chunks")
-    return index
-
-
 def _publish(
     session_dir: Path,
     session: dict,
@@ -129,10 +120,10 @@ def _publish(
     gap_before_s: float,
     window_index: int,
 ) -> list[ChunkRow]:
-    """Move staged MP4s onto the next free session indexes and rewrite the manifest."""
-    chunks_dir = session_dir / "chunks"
-    chunks_dir.mkdir(parents=True, exist_ok=True)
-    manifest_file = chunks_dir / "session.chunks.json"
+    """Move staged MP4s into the shared chunks folder and rewrite the manifest."""
+    manifest_dir = session_dir / "chunks"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    manifest_file = manifest_dir / "session.chunks.json"
     if manifest_file.is_file():
         manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     else:
@@ -145,30 +136,27 @@ def _publish(
         }
     existing = [row for row in manifest.get("chunks") or [] if isinstance(row, dict)]
     offset = float(existing[-1]["end_s"]) if existing else 0.0
-    used = {int(row["index"]) for row in existing if "index" in row}
-    next_index = _next_session_index(chunks_dir, used, 0)
+    next_index = len(existing)
 
     rows: list[ChunkRow] = []
     moved: list[Path] = []
+    ordered = sorted(records, key=lambda item: item.index)
     try:
-        for record in sorted(records, key=lambda item: item.index):
-            next_index = _next_session_index(chunks_dir, used, next_index)
-            name = f"session_{next_index:04d}.mp4"
-            dest = chunks_dir / name
-            Path(record.path).replace(dest)
-            moved.append(dest)
-            row = ChunkRow(
-                index=next_index,
-                file=name,
-                start_s=offset + float(record.start_s),
-                end_s=offset + float(record.end_s),
-                size_bytes=dest.stat().st_size,
-                window_index=window_index,
-                gap_before_s=gap_before_s,
-            )
-            rows.append(row)
-            used.add(next_index)
-            next_index += 1
+        with reserved_chunk_paths(len(ordered)) as destinations:
+            for record, dest in zip(ordered, destinations):
+                Path(record.path).replace(dest)
+                moved.append(dest)
+                row = ChunkRow(
+                    index=next_index,
+                    file=dest.name,
+                    start_s=offset + float(record.start_s),
+                    end_s=offset + float(record.end_s),
+                    size_bytes=dest.stat().st_size,
+                    window_index=window_index,
+                    gap_before_s=gap_before_s,
+                )
+                rows.append(row)
+                next_index += 1
         manifest = {
             "session_id": session["id"],
             "chunk_duration_s": session["chunk_duration_s"],
@@ -201,9 +189,9 @@ def accept_media(session_dir: Path, upload_path: Path, *, gap_before_s: float) -
     """Probe ``upload_path``, apply the slack rule, and publish session MP4s.
 
     ``chunk_video`` always restarts names at 0000, so each call writes into a
-    private stage directory. Publish renames the results to the next free
-    ``session_XXXX.mp4`` indexes and rewrites ``session.chunks.json`` by
-    temp file and rename. If probing or cutting fails, publish does not run.
+    private stage directory. Publish moves the results into the shared chunks
+    folder as ``YYYY-MM-DD_HH-MM-SS_001.mp4`` and rewrites the session manifest
+    by temp file and rename. If probing or cutting fails, publish does not run.
     """
     session = json.loads((session_dir / "session.json").read_text(encoding="utf-8"))
     match = _WINDOW_NAME.fullmatch(upload_path.name)

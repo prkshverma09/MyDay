@@ -556,7 +556,7 @@ def last_seen_from(key_entries: list[dict]) -> list[dict]:
 
 
 _DAY = re.compile(r"^(\d{4}-\d{2}-\d{2})")
-_MEMORY_LINE = re.compile(r"^(\d{4}-\d{2}-\d{2})  (.*)$")
+_MEMORY_LINE = re.compile(r"^(\d{4}-\d{2}-\d{2})  (\d+):(\d{2})–(\d+):(\d{2})  (.*)$")
 
 
 def record_day(record: dict) -> str | None:
@@ -575,8 +575,16 @@ def memory_line(entry: dict) -> str:
     """The one line a person or an agent reads for this memory."""
 
     day = str(entry.get("day") or "undated")
+    frame = entry.get("time_frame") or entry.get("window") or {}
+    start = _stamp(float(frame.get("start_sec") or 0))
+    end = _stamp(float(frame.get("end_sec") or 0))
     sentence = str(entry.get("statement") or "").strip()
-    return f"{day}  {sentence}".rstrip()
+    return f"{day}  {start}–{end}  {sentence}".rstrip()
+
+
+def _stamp(seconds: float) -> str:
+    total = int(round(seconds))
+    return f"{total // 60}:{total % 60:02d}"
 
 
 def render_memory(entries: list[dict]) -> str:
@@ -599,11 +607,15 @@ def read_memory(path: Path) -> list[dict]:
         match = _MEMORY_LINE.match(line)
         if not match:
             continue
+        start = int(match.group(2)) * 60 + int(match.group(3))
+        end = int(match.group(4)) * 60 + int(match.group(5))
         rows.append(
             {
                 "text": line,
                 "day": match.group(1),
-                "statement": match.group(2),
+                "start_sec": start,
+                "end_sec": end,
+                "statement": match.group(6),
             }
         )
     return rows
@@ -1018,7 +1030,15 @@ def _translate_places(statement: str) -> str:
     for token, phrase in _PLACE_WORDS.items():
         if " " in token:
             continue
+        bare = phrase[4:] if phrase.lower().startswith("the ") else phrase
+        statement = re.sub(
+            rf"\bthe\s+{re.escape(token)}\b",
+            f"the {bare}",
+            statement,
+            flags=re.IGNORECASE,
+        )
         statement = re.sub(rf"\b{re.escape(token)}\b", phrase, statement, flags=re.IGNORECASE)
+    statement = re.sub(r"\bthe\s+the\b", "the", statement, flags=re.IGNORECASE)
     return statement
 
 

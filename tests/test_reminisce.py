@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -17,6 +18,7 @@ from reminisce.agent import (
     is_grounded,
     story,
 )
+from reminisce.day_memory import load_key_moments
 from reminisce.store import Clip, next_clip_id, set_shared, upsert_clip
 from reminisce.vectors import extract_clip_ids, rank_clips, tag_match
 from reminisce.vss_search import (
@@ -525,6 +527,60 @@ class ReminisceTests(unittest.TestCase):
         taken = [_clip("clip_20261017_144612", "Lunch.", ["lunch"], [1.0, 0.0])]
         self.assertEqual(next_clip_id(taken, when), "clip_20261017_144612_2")
         self.assertEqual(extract_clip_ids("Source: clip_20261017_144612."), ["clip_20261017_144612"])
+
+
+class KeyMomentsTests(unittest.TestCase):
+    def test_story_reads_the_days_key_moments(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            day = Path(folder) / "2026-10-17"
+            day.mkdir()
+            (day / "key_moments.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "text": "2026-10-17  You put your keys down in the hallway.",
+                            "statement": "You put your keys down in the hallway.",
+                            "day": "2026-10-17",
+                            "location": "hallway",
+                        },
+                        {"statement": "  ", "text": ""},
+                        {"statement": "Sarah visited and mentioned the dentist."},
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            moments = load_key_moments("2026-10-17", Path(folder))
+        self.assertEqual(
+            moments,
+            [
+                {
+                    "statement": "You put your keys down in the hallway.",
+                    "day": "2026-10-17",
+                    "location": "hallway",
+                },
+                {
+                    "statement": "Sarah visited and mentioned the dentist.",
+                    "day": "",
+                    "location": "",
+                },
+            ],
+        )
+
+    def test_missing_day_has_no_key_moments(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual(load_key_moments("2026-10-17", Path(folder)), [])
+
+    def test_text_file_is_used_when_json_is_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            day = Path(folder) / "2026-10-17"
+            day.mkdir()
+            (day / "key_moments.txt").write_text(
+                "2026-10-17  You made a cup of tea and switched off the kettle.\n",
+                encoding="utf-8",
+            )
+            moments = load_key_moments("2026-10-17", Path(folder))
+        self.assertEqual(moments[0]["statement"], "You made a cup of tea and switched off the kettle.")
+        self.assertEqual(moments[0]["day"], "2026-10-17")
 
 
 if __name__ == "__main__":

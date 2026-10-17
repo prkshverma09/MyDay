@@ -28,6 +28,7 @@ from stream_chunk.sessions import (
     AlreadyComplete,
     SessionClosed,
     UnknownSession,
+    adopt_session_chunks,
     create_session,
     get_session,
     load_chunks,
@@ -156,6 +157,7 @@ def _complete(session_id: str) -> dict[str, Any]:
 
 
 def create_app() -> FastAPI:
+    adopt_session_chunks()
     application = FastAPI(
         title="stream-chunk",
         docs_url=None,
@@ -165,6 +167,7 @@ def create_app() -> FastAPI:
     application.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins(),
+        allow_origin_regex=r"https?://(127\.0\.0\.1|localhost)(:\d+)?|https://[a-z0-9-]+\.trycloudflare\.com",
         allow_credentials=False,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],

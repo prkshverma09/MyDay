@@ -18,7 +18,7 @@ The app starts with an empty journal. Upload clips you have consent to use. The 
 - Play the clip the answer came from.
 - Under the answer, see search results as small picture rows: other saved clips that match, then the shared camera archive grouped by video, each with the time of the best moment, the place, the camera, the match score, and **Play**, which opens the video under that row. Archive pictures are one frame taken on the server from each returned segment. There is nothing to set: phrases like `in new york` or `this week` in the question narrow the search by themselves. **Show more** fetches up to 50 results.
 - Send one clip to a carer, or take it back.
-- Play a short story of three to five clips. The sentences are the clip descriptions, in time order.
+- Open **Story** to read the day's key moments, one sentence each, from `data/memory/<today>/`.
 
 The main row has three tabs: **My day**, **Ask**, and **Story**. **Eval** is a small button at the top of the page, shown only when an eval report exists. The carer view in `frontend/views/carer.py` is not in the main row.
 

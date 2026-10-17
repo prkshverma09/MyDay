@@ -1,15 +1,17 @@
-"""Session folders, ids, and the per-session lock."""
+"""Session folders, ids, and the shared chunks folder."""
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from stream_chunk.config import data_dir, default_seconds, slack_seconds
 
@@ -19,10 +21,20 @@ _ID_RE = re.compile(
     r"^(?:[0-9a-f]{12}|[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}_[0-9a-f]{6})$"
 )
 _WINDOW_RE = re.compile(r"^window_(\d{4})\.[A-Za-z0-9]+$")
-_CHUNK_RE = re.compile(r"^session_\d{4}\.mp4$")
+# Current files: 2026-10-17_15-24-01_001.mp4. Older sessions used session_0000.mp4.
+_CHUNK_RE = re.compile(
+    r"^(?:session_\d{4}|\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_\d{3})\.mp4$"
+)
+_STAMPED_CHUNK = re.compile(
+    r"^(?P<stamp>\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_(?P<seq>\d{3})\.mp4$"
+)
+_SESSION_STAMP = re.compile(r"^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_[0-9a-f]{6}$")
+_LEGACY_CHUNK = re.compile(r"^session_(\d{4})\.mp4$")
 
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
+_chunk_names = threading.Lock()
+logger = logging.getLogger(__name__)
 
 
 class APIError(Exception):
@@ -168,6 +180,109 @@ def set_status(session_id: str, status: str) -> dict[str, Any]:
     return payload
 
 
+def chunks_directory() -> Path:
+    """The one folder every published chunk is written into."""
+    path = _require_under_data(data_dir().resolve() / "chunks")
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+@contextmanager
+def reserved_chunk_paths(count: int) -> Iterator[list[Path]]:
+    """Reserve timestamped names in the shared chunks folder.
+
+    The lock is held until the caller finishes moving files into those paths,
+    so two recordings cannot take the same name.
+    """
+    if count < 1:
+        yield []
+        return
+    directory = chunks_directory()
+    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    with _chunk_names:
+        used = _used_sequences(directory, stamp)
+        paths: list[Path] = []
+        seq = 1
+        while len(paths) < count:
+            if seq not in used:
+                paths.append(_require_under_data(directory / f"{stamp}_{seq:03d}.mp4"))
+                used.add(seq)
+            seq += 1
+            if seq > 999:
+                raise APIError(500, "too_many_chunks", "too many chunks in the same second")
+        yield paths
+
+
+def _used_sequences(directory: Path, stamp: str) -> set[int]:
+    used: set[int] = set()
+    for entry in directory.iterdir():
+        match = _STAMPED_CHUNK.fullmatch(entry.name)
+        if match and match.group("stamp") == stamp:
+            used.add(int(match.group("seq")))
+    return used
+
+
+def adopt_session_chunks() -> int:
+    """Move chunk MP4s out of per-session folders into the shared folder.
+
+    A session named ``2026-10-17_15-24-01_ab12cd`` keeps that time in the
+    filenames (``..._001.mp4``, ``..._002.mp4``). The session manifest is
+    updated to the new names. Files already in the shared folder stay put.
+    """
+    root = data_dir().resolve()
+    sessions = root / "sessions"
+    if not sessions.is_dir():
+        return 0
+    moved = 0
+    for session_dir in sorted(path for path in sessions.iterdir() if path.is_dir()):
+        try:
+            moved += _adopt_one_session(session_dir)
+        except OSError:
+            logger.exception("could not move chunks from %s", session_dir.name)
+    return moved
+
+
+def _adopt_one_session(session_dir: Path) -> int:
+    chunks = session_dir / "chunks"
+    if not chunks.is_dir():
+        return 0
+    sources = sorted(
+        path for path in chunks.iterdir() if path.is_file() and _LEGACY_CHUNK.fullmatch(path.name)
+    )
+    if not sources:
+        return 0
+    stamp_match = _SESSION_STAMP.fullmatch(session_dir.name)
+    if stamp_match:
+        stamp = stamp_match.group(1)
+    else:
+        stamp = datetime.fromtimestamp(sources[0].stat().st_mtime).strftime("%Y-%m-%d_%H-%M-%S")
+    directory = chunks_directory()
+    renamed: dict[str, str] = {}
+    with _chunk_names:
+        for source in sources:
+            seq = int(_LEGACY_CHUNK.fullmatch(source.name).group(1)) + 1
+            while True:
+                dest = directory / f"{stamp}_{seq:03d}.mp4"
+                if not dest.exists():
+                    break
+                seq += 1
+                if seq > 999:
+                    raise OSError(f"no free chunk name for {source.name}")
+            _require_under_data(dest)
+            source.replace(dest)
+            renamed[source.name] = dest.name
+    manifest_file = chunks / "session.chunks.json"
+    if manifest_file.is_file() and renamed:
+        payload = json.loads(manifest_file.read_text(encoding="utf-8"))
+        rows = payload.get("chunks") if isinstance(payload, dict) else None
+        if isinstance(rows, list):
+            for row in rows:
+                if isinstance(row, dict) and row.get("file") in renamed:
+                    row["file"] = renamed[row["file"]]
+            atomic_write_json(manifest_file, payload)
+    return len(renamed)
+
+
 def manifest_path(session_id: str) -> Path:
     return session_directory(session_id) / "chunks" / "session.chunks.json"
 
@@ -210,8 +325,12 @@ def resolve_chunk_file(session_id: str, filename: str) -> Path:
         raise UnknownChunk()
     if not any(row.get("file") == filename for row in load_chunks(session_id)):
         raise UnknownChunk()
-    directory = _require_under_data(session_directory(session_id) / "chunks")
-    path = _require_under_data(directory / filename)
-    if path.parent != directory or not path.is_file():
-        raise UnknownChunk()
-    return path
+    shared = chunks_directory()
+    path = _require_under_data(shared / filename)
+    if path.parent == shared and path.is_file():
+        return path
+    legacy_dir = _require_under_data(session_directory(session_id) / "chunks")
+    legacy = _require_under_data(legacy_dir / filename)
+    if legacy.parent == legacy_dir and legacy.is_file():
+        return legacy
+    raise UnknownChunk()

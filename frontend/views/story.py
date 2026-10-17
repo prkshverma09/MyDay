@@ -1,26 +1,43 @@
-"""Story page."""
+"""Story page: the day's key moments."""
 
 from __future__ import annotations
 
 import html
-import time
+from datetime import date
 
 import streamlit as st
 
-from frontend.views.common import _clip_picture, _clip_words
-from reminisce.agent import story
-from reminisce.store import load_clips
-from reminisce.tracing import trace_from_answer
+from reminisce.day_memory import load_key_moments
 
-def _page_story(prefs: dict) -> None:
+
+def _page_story(_prefs: dict) -> None:
+    day = date.today()
+    moments = load_key_moments(day.isoformat())
     st.markdown('<p class="greeting">Story</p>', unsafe_allow_html=True)
-    if st.button("Tell story", key="tell-story", type="primary", icon=":material/auto_stories:", width="stretch"):
-        started = time.perf_counter()
-        answer = story(load_clips(), owner_id=prefs["owner_id"])
-        trace_from_answer("story", "story", answer, time.perf_counter() - started)
-        st.markdown(f'<p class="answer-line">{html.escape(answer.text)}</p>', unsafe_allow_html=True)
-        for clip in answer.clips:
-            with st.container(border=True, key=f"shown-story-{clip.clip_id.replace('_', '-')}"):
-                _clip_picture(clip)
-                _clip_words(clip, description=False)
+    st.markdown(
+        f'<p class="tagline">{html.escape(_day_label(day))}</p>',
+        unsafe_allow_html=True,
+    )
+    if not moments:
+        st.info("No key moments for today yet.")
+        return
+    for index, moment in enumerate(moments):
+        with st.container(border=True, key=f"key-moment-{index}"):
+            place = _place(moment["location"])
+            if place:
+                st.markdown(f'<p class="clip-time">{html.escape(place)}</p>', unsafe_allow_html=True)
+            st.markdown(
+                f'<p class="answer-line">{html.escape(moment["statement"])}</p>',
+                unsafe_allow_html=True,
+            )
 
+
+def _day_label(day: date) -> str:
+    return f"{day.strftime('%A')} {day.day} {day.strftime('%B')}"
+
+
+def _place(location: str) -> str:
+    text = " ".join(location.split())
+    if not text:
+        return ""
+    return text[:1].upper() + text[1:]

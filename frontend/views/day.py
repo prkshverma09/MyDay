@@ -10,8 +10,9 @@ import streamlit as st
 
 from frontend.views.common import PREVIEW, _clip_detail, _greeting, _query_open, _thumb_slot
 from frontend.views.progress import NOTE, Steps
+from frontend.views.recorder import render_recorder
 from reminisce.ingest import ingest_video
-from reminisce.media import MediaError, normalize_upload, record_camera
+from reminisce.media import MediaError, normalize_upload
 from reminisce.models import ModelError
 from reminisce.settings import CLIPS_DIR, MAX_CLIP_SECONDS, MIN_CLIP_SECONDS
 from reminisce.store import load_clips, next_clip_id
@@ -39,12 +40,10 @@ def _add_box(prefs: dict) -> None:
                 width="stretch",
             )
         with record_col:
-            record = st.button("Record", icon=":material/videocam:", width="stretch")
+            render_recorder()
     tag_list = [part.strip().lower() for part in tags.split(",") if part.strip()]
     if add and upload is not None:
         _accept_upload(upload, tag_list, prefs)
-    if record:
-        _record(tag_list, prefs)
 
 def _page_day(prefs: dict) -> None:
     st.markdown(f'<p class="greeting">{html.escape(_greeting())}</p>', unsafe_allow_html=True)
@@ -125,26 +124,6 @@ def _accept_upload(upload, tags: list[str], prefs: dict) -> None:
         normalize_upload(source, dest)
         steps.done("Video ready")
         _ingest(steps, dest, clip_id, when, tags, prefs)
-    except (MediaError, ModelError, RuntimeError) as exc:
-        steps.finish("The clip could not be added", ok=False)
-        st.error(safe_error(exc))
-        return
-    _saved(steps)
-
-def _record(tags: list[str], prefs: dict) -> None:
-    when = datetime.now().astimezone()
-    clip_id = next_clip_id(load_clips(), when)
-    dest = CLIPS_DIR / "uploads" / f"{clip_id}.mp4"
-    steps = Steps("Recording a clip")
-    try:
-        steps.start("Recording 8 seconds")
-        recorded = record_camera(dest, seconds=8)
-        if recorded is None:
-            steps.finish("No camera found", ok=False)
-            st.info("No camera. Add a clip instead.")
-            return
-        steps.done("Recorded 8 seconds")
-        _ingest(steps, recorded, clip_id, when, tags, prefs)
     except (MediaError, ModelError, RuntimeError) as exc:
         steps.finish("The clip could not be added", ok=False)
         st.error(safe_error(exc))

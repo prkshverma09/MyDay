@@ -13,7 +13,7 @@ A real run writes to `data/memory/` at the repo root, one folder per day. The fo
 
 Each day folder contains:
 
-- `general_memory.txt` — routine memories, one line each: `2026-10-17  You filled the kettle at the sink in the kitchen.`
+- `general_memory.txt` — routine memories, one line each: `2026-10-17  0:00–0:05  You filled the kettle at the sink in the kitchen.`
 - `key_moments.txt` — the key memories in that same text form
 - `general_memory.json` and `key_moments.json` — the same lines, plus the video span for cross-checking
 - `last-seen.json` — the latest place a tracked object was put down, taken from the key file
