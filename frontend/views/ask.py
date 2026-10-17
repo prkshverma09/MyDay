@@ -113,7 +113,7 @@ def _show_reply(index: int, turn: dict, prefs: dict, *, stream: bool) -> None:
         else:
             st.markdown(f'<p class="answer-line">{html.escape(sentence)}</p>', unsafe_allow_html=True)
         clip_row(clip, prefs, turn=index, section="answer", line="")
-    show_journal(turn["journal"], prefs, skip=set(answer.citations), turn=index, question=question)
+    show_journal(turn["journal"], skip=set(answer.citations), turn=index)
 
 
 def _agent_progress(steps: Steps):

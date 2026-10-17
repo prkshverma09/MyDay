@@ -11,7 +11,7 @@ import streamlit as st
 
 from frontend.views.common import _first_upper, _frame_path, _media, _send_button
 from reminisce.agent import clips_since, find_clips
-from reminisce.demo import is_demo, key_sentence, span_label
+from reminisce.demo import is_demo, span_label
 from reminisce.store import Clip, human_when
 from reminisce.vss_search import SearchFilters, parse_query
 
@@ -107,13 +107,9 @@ def clip_row(clip: Clip, prefs: dict, *, turn: int, section: str, line: str | No
     )
 
 
-def show_journal(hits, prefs: dict, *, skip: set[str], turn: int, question: str) -> None:
-    hits = [hit for hit in hits if hit.clip.clip_id not in skip]
-    if not hits:
-        return
-    st.markdown('<p class="result-head">Other moments</p>', unsafe_allow_html=True)
-    for hit in hits:
-        clip_row(hit.clip, prefs, turn=turn, section="journal", line=key_sentence(hit.clip, question))
+def show_journal(hits, *, skip: set[str], turn: int) -> None:
+    clips = [hit.clip for hit in hits if hit.clip.clip_id not in skip]
+    show_tiles(clips, turn=turn, heading="Other moments", caption=False)
 
 
 def _tile_background(key: str, thumb) -> str:
@@ -130,12 +126,19 @@ def _tile_background(key: str, thumb) -> str:
     )
 
 
-def show_tiles(clips: list[Clip], *, turn: int, count: int = 4) -> None:
-    """When nothing answers the question: a few moments as a small 2×2 picture grid."""
+def show_tiles(
+    clips: list[Clip],
+    *,
+    turn: int,
+    count: int = 4,
+    heading: str = "From your video",
+    caption: bool = True,
+) -> None:
+    """A few moments as a small 2×2 picture grid; tap a picture to play from there."""
     clips = clips[:count]
     if not clips:
         return
-    st.markdown('<p class="result-head">From your video</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="result-head">{html.escape(heading)}</p>', unsafe_allow_html=True)
     playing = None
     for start in range(0, len(clips), 2):
         columns = st.columns(2, gap="small")
@@ -153,7 +156,8 @@ def show_tiles(clips: list[Clip], *, turn: int, count: int = 4) -> None:
                 ):
                     st.session_state["search_open"] = "" if is_open else open_id
                     st.rerun()
-                st.markdown(f'<p class="tile-when">{html.escape(when_label(clip))}</p>', unsafe_allow_html=True)
+                if caption:
+                    st.markdown(f'<p class="tile-when">{html.escape(when_label(clip))}</p>', unsafe_allow_html=True)
             if is_open:
                 playing = clip
     if playing is not None:
