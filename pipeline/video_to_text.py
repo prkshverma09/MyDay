@@ -36,12 +36,18 @@ FFMPEG = "/usr/bin/ffmpeg" if Path("/usr/bin/ffmpeg").is_file() else "ffmpeg"
 FFPROBE = "/usr/bin/ffprobe" if Path("/usr/bin/ffprobe").is_file() else "ffprobe"
 
 COSMOS_PROMPT = (
-    "Describe only what is clearly visible, in short sentences. "
-    "Each sentence needs an actor, an action, an object with color or type, "
-    "and where it is relative to another visible thing. "
-    "Example shape, do not copy the example: "
-    "'A person in a black coat stands beside a yellow taxi.' "
-    "Skip weather and general setting. Do not invent objects or actions."
+    "Write a very detailed description of everything clearly visible in this video chunk. "
+    "A later step will shorten it, so do not summarize and do not stop early. "
+    "Use short sentences and cover the chunk from start to end. "
+    "When the camera is the person's own view, write in the first person and say I. "
+    "Include people and hands, clothing and colors, and every object you can see, "
+    "including phones, computers, laptops, cups, keys, furniture, cables, and papers. "
+    "Say where each object is: on, next to, in front of, left, right, or behind something else. "
+    "Describe actions over time, such as picking up, putting down, walking, turning, and looking. "
+    "Include readable text when it is visible. "
+    "Mention lighting and the room layout only when they help locate an object. "
+    "If someone puts, places, or sets an object next to another object, say that among the other details. "
+    "Do not invent objects or actions that are not visible."
 )
 EXAMPLE_SENTENCE = "a person in a black coat stands beside a yellow taxi."
 ABSURD_LABELS = {"toilet", "airplane", "train"}
@@ -155,7 +161,7 @@ def _sentences(text: str) -> list[str]:
             if parts and parts[-1] == chunk:
                 continue
             parts.append(chunk)
-    return parts[:5]
+    return parts
 
 
 def _needs_retry(text: str) -> bool:
@@ -180,8 +186,8 @@ def call_cosmos(video_path: str) -> dict:
         {"type": "video_url", "video_url": {"url": "data:video/mp4;base64," + video_b64}},
     ]
     attempts = (
-        {"temperature": 0.2, "max_tokens": 400},
-        {"temperature": 0.2, "max_tokens": 180, "repetition_penalty": 1.15},
+        {"temperature": 0.2, "max_tokens": 1500},
+        {"temperature": 0.2, "max_tokens": 1500, "repetition_penalty": 1.15},
     )
     last_error = None
     chosen = None
@@ -213,8 +219,10 @@ def call_cosmos(video_path: str) -> dict:
         message = body["choices"][0]["message"]
         text = message.get("content") or message.get("reasoning_content") or ""
         usage = body.get("usage") or {}
+        sentences = _sentences(text)
         candidate = {
-            "sentences": _sentences(text),
+            "text": " ".join(sentences),
+            "sentences": sentences,
             "inference_s": round(elapsed, 3),
             "prompt_tokens": usage.get("prompt_tokens"),
             "completion_tokens": usage.get("completion_tokens"),

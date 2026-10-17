@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>My Day — chunk annotations</title>
+  <title>My Day — chunk descriptions</title>
   <style>
     :root {
       --bg: #f4efe8;
@@ -24,20 +24,14 @@
       display: flex;
       flex-direction: column;
     }
-    header {
-      padding: 18px 24px 6px;
-    }
+    header { padding: 18px 24px 6px; }
     header h1 {
       margin: 0;
       font-size: 22px;
       font-weight: 650;
       letter-spacing: -0.02em;
     }
-    header p {
-      margin: 4px 0 0;
-      color: var(--muted);
-      font-size: 14px;
-    }
+    header p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
     main {
       flex: 1;
       min-height: 0;
@@ -64,250 +58,125 @@
       border-radius: 10px;
       background: #161616;
     }
-    .panel {
-      display: flex;
-      flex-direction: column;
-    }
-    .panel-head {
-      padding: 14px 16px 8px;
-      border-bottom: 1px solid var(--line);
-    }
-    .panel-head h2 {
-      margin: 0;
-      font-size: 16px;
-    }
-    .panel-head p {
-      margin: 4px 0 0;
-      color: var(--muted);
-      font-size: 13px;
-    }
-    #list {
-      overflow: auto;
-      padding: 12px;
-    }
-    article {
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 12px 14px;
-      margin-bottom: 10px;
-      background: #fff;
-    }
-    article.active {
-      border-color: var(--accent);
-      background: var(--highlight);
-      box-shadow: inset 4px 0 0 var(--accent);
-    }
+    .panel { display: flex; flex-direction: column; }
     .meta {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
       gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
     }
-    .range {
+    #range {
       font-weight: 700;
       font-variant-numeric: tabular-nums;
-      font-size: 16px;
+      font-size: 18px;
     }
-    .ago {
+    #ago {
       color: var(--accent);
       font-weight: 700;
       font-variant-numeric: tabular-nums;
-      font-size: 15px;
       white-space: nowrap;
     }
-    h3 {
-      margin: 12px 0 4px;
-      font-size: 11px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--muted);
+    #text {
+      overflow: auto;
+      padding: 14px 16px 18px;
+      font-size: 16px;
+      line-height: 1.5;
+      white-space: pre-wrap;
     }
-    ul {
-      margin: 0;
-      padding-left: 18px;
-    }
-    li {
-      margin: 3px 0;
-      font-size: 14px;
-      line-height: 1.4;
-    }
-    .empty, .status {
-      color: var(--muted);
-      font-size: 14px;
-    }
+    #text.pending { color: var(--muted); }
     @media (max-width: 860px) {
-      main {
-        grid-template-columns: 1fr;
-        overflow: auto;
-      }
+      main { grid-template-columns: 1fr; overflow: auto; }
       video { max-height: 46vh; }
-      .panel { min-height: 420px; }
+      .panel { min-height: 360px; }
     }
   </style>
 </head>
 <body>
   <header>
-    <h1>Chunk annotations</h1>
-    <p>One continuous video. Cosmos sentences and YOLO objects for each 10-second chunk.</p>
+    <h1>Chunk descriptions</h1>
+    <p>One continuous video. The text is the full Cosmos description of the 10-second chunk under the playhead.</p>
   </header>
   <main>
     <section class="stage">
-      <video id="video" controls playsinline preload="metadata">
-        <source src="IMG_2512.mp4" type="video/mp4">
-      </video>
+      <video id="video" controls playsinline preload="metadata" src="/video"></video>
     </section>
     <section class="panel">
-      <div class="panel-head">
-        <h2>Annotations</h2>
-        <p id="summary">Loading annotations…</p>
+      <div class="meta">
+        <div id="range">…</div>
+        <div id="ago"></div>
       </div>
-      <div id="list"></div>
+      <div id="text" class="pending">Describing this moment…</div>
     </section>
   </main>
   <script>
     const video = document.getElementById("video");
-    const list = document.getElementById("list");
-    const summary = document.getElementById("summary");
-    let records = [];
-    let activeIndex = -1;
+    const range = document.getElementById("range");
+    const ago = document.getElementById("ago");
+    const text = document.getElementById("text");
+    let shown = null;
+    let inflight = false;
+    let queued = false;
 
     function integerSecond(value) {
       return Math.max(0, Math.floor(Number(value) || 0));
     }
 
-    function videoEnd() {
-      if (Number.isFinite(video.duration) && video.duration > 0) {
-        return video.duration;
-      }
-      return records.reduce((max, record) => Math.max(max, Number(record.chunk.end_sec) || 0), 0);
+    function covers(record, time) {
+      if (!record) return false;
+      const start = Number(record.start_sec);
+      const end = Number(record.end_sec);
+      if (time < start - 0.05) return false;
+      if (record.is_last) return time <= end + 0.05;
+      return time < end - 0.001;
     }
 
-    function secondsAgo(record) {
-      return Math.max(0, integerSecond(videoEnd() - Number(record.chunk.start_sec)));
+    function paint(record) {
+      range.textContent = integerSecond(record.start_sec) + "–" + integerSecond(record.end_sec) + "s";
+      ago.textContent = Number(record.seconds_ago) + " seconds ago";
+      text.classList.remove("pending");
+      text.textContent = record.cosmos_text || "No description.";
     }
 
-    function containsTime(record, time, isLast) {
-      const start = Number(record.chunk.start_sec);
-      const end = Number(record.chunk.end_sec);
-      if (isLast) return time >= start;
-      return time >= start && time < end;
-    }
-
-    function activeRecordIndex(time) {
-      if (!records.length) return -1;
-      const t = Number.isFinite(time) ? time : 0;
-      for (let i = 0; i < records.length; i += 1) {
-        if (containsTime(records[i], t, i === records.length - 1)) return i;
-      }
-      return t < Number(records[0].chunk.start_sec) ? 0 : records.length - 1;
-    }
-
-    function render() {
-      list.replaceChildren();
-      if (!records.length) {
-        const note = document.createElement("p");
-        note.className = "status";
-        note.textContent = "No chunk annotations yet.";
-        list.appendChild(note);
+    async function sync() {
+      const time = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+      if (covers(shown, time)) return;
+      if (inflight) {
+        queued = true;
         return;
       }
-      const current = activeRecordIndex(video.currentTime || 0);
-      records.forEach((record, index) => {
-        const chunk = record.chunk;
-        const article = document.createElement("article");
-        article.dataset.index = String(index);
-        if (index === current) article.classList.add("active");
-
-        const meta = document.createElement("div");
-        meta.className = "meta";
-        const range = document.createElement("div");
-        range.className = "range";
-        range.textContent = integerSecond(chunk.start_sec) + "–" + integerSecond(chunk.end_sec) + "s";
-        const ago = document.createElement("div");
-        ago.className = "ago";
-        ago.textContent = secondsAgo(record) + " seconds ago";
-        meta.append(range, ago);
-        article.appendChild(meta);
-
-        const cosmosTitle = document.createElement("h3");
-        cosmosTitle.textContent = "Cosmos";
-        article.appendChild(cosmosTitle);
-        article.appendChild(sentenceList(record.cosmos && record.cosmos.sentences));
-
-        const yoloTitle = document.createElement("h3");
-        yoloTitle.textContent = "YOLO";
-        article.appendChild(yoloTitle);
-        article.appendChild(objectList(record.yolo && record.yolo.objects));
-        list.appendChild(article);
-      });
-      if (current !== activeIndex) {
-        activeIndex = current;
-        const node = list.querySelector("article.active");
-        if (node) {
-          const listRect = list.getBoundingClientRect();
-          const nodeRect = node.getBoundingClientRect();
-          if (nodeRect.top < listRect.top || nodeRect.bottom > listRect.bottom) {
-            list.scrollTop += nodeRect.top - listRect.top - 8;
-          }
+      inflight = true;
+      queued = false;
+      if (!shown) {
+        text.classList.add("pending");
+        text.textContent = "Describing this moment…";
+      }
+      try {
+        const response = await fetch("/chunk?t=" + encodeURIComponent(time.toFixed(3)) + "&chunk=10");
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+        const now = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+        if (covers(payload, now)) {
+          shown = payload;
+          paint(payload);
+        } else {
+          queued = true;
         }
+      } catch (error) {
+        text.classList.add("pending");
+        text.textContent = error.message || "Could not describe this chunk.";
+      } finally {
+        inflight = false;
+        if (queued) sync();
       }
     }
 
-    function sentenceList(sentences) {
-      const items = Array.isArray(sentences) ? sentences.filter(Boolean) : [];
-      if (!items.length) return emptyItem("No Cosmos sentences.");
-      const ul = document.createElement("ul");
-      items.forEach((sentence) => {
-        const li = document.createElement("li");
-        li.textContent = sentence;
-        ul.appendChild(li);
-      });
-      return ul;
-    }
-
-    function objectList(objects) {
-      const items = Array.isArray(objects) ? objects : [];
-      if (!items.length) return emptyItem("No YOLO objects.");
-      const ul = document.createElement("ul");
-      items.forEach((object) => {
-        const li = document.createElement("li");
-        const label = object.label || "object";
-        const position = object.position || "unknown";
-        li.textContent = label + " · " + position;
-        ul.appendChild(li);
-      });
-      return ul;
-    }
-
-    function emptyItem(text) {
-      const p = document.createElement("p");
-      p.className = "empty";
-      p.textContent = text;
-      return p;
-    }
-
-    async function loadAnnotations() {
-      const response = await fetch("annotations.jsonl");
-      if (!response.ok) throw new Error("annotations.jsonl HTTP " + response.status);
-      const text = await response.text();
-      records = text.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => JSON.parse(line));
-      records.sort((a, b) => Number(a.chunk.start_sec) - Number(b.chunk.start_sec));
-      summary.textContent = records.length + " chunk" + (records.length === 1 ? "" : "s") + " · 10-second cuts";
-      render();
-    }
-
-    video.addEventListener("timeupdate", render);
-    video.addEventListener("seeked", render);
-    video.addEventListener("loadedmetadata", render);
-    video.addEventListener("play", render);
-
-    loadAnnotations().catch((error) => {
-      summary.textContent = "Could not load annotations.";
-      const note = document.createElement("p");
-      note.className = "status";
-      note.textContent = error.message;
-      list.appendChild(note);
-    });
+    video.addEventListener("timeupdate", sync);
+    video.addEventListener("seeked", sync);
+    video.addEventListener("loadedmetadata", sync);
+    video.addEventListener("play", sync);
+    sync();
   </script>
 </body>
 </html>

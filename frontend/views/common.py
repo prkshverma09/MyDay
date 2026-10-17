@@ -20,6 +20,7 @@ from reminisce import vast_index
 PREVIEW = 4
 
 NAV = (
+    ("Clip", "nav-clip", ":material/play_circle:"),
     ("My day", "nav-day", ":material/home:"),
     ("Ask", "nav-ask", ":material/chat_bubble:"),
     ("Story", "nav-story", ":material/auto_stories:"),
@@ -44,7 +45,7 @@ def _clear_open() -> None:
 
 def _nav() -> str:
     if "nav" not in st.session_state:
-        st.session_state["nav"] = "My day"
+        st.session_state["nav"] = "Clip"
     with st.container(key="quiet-eval"):
         if st.button("Eval", key="nav-eval", type="tertiary", icon=":material/bar_chart:"):
             st.session_state["nav"] = "Eval"
@@ -52,7 +53,7 @@ def _nav() -> str:
             st.rerun()
     st.title("My Day")
     st.markdown('<p class="tagline">Make every day count.</p>', unsafe_allow_html=True)
-    columns = st.columns(4)
+    columns = st.columns(len(NAV))
     for column, (label, key, icon) in zip(columns, NAV):
         selected = st.session_state["nav"] == label
         with column:
