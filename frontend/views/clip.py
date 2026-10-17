@@ -1,4 +1,4 @@
-"""Example clip inside the Streamlit app.
+"""The demo clip player shown at the top of My day.
 
 The player and the seconds-ago clock run in the browser. Streamlit does not
 rerun as the video plays. Chunk text is fetched from the description backend.
@@ -78,6 +78,10 @@ _PLAYER = """
       white-space: pre-wrap;
     }
     #text.pending { color: #6e6258; }
+    @media (max-width: 820px) {
+      main { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+      .stage { padding: 6px; }
+    }
   </style>
 </head>
 <body>
@@ -206,24 +210,13 @@ def _save_upload(upload) -> Path:
     return dest
 
 
-def _page_clip(_prefs: dict) -> None:
-    st.markdown('<p class="greeting">This clip</p>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="quiet-note">IMG_2517.mp4 is loaded. The number is how many whole seconds remain until it ends, and the text is the chunk under the playhead. Upload another file to replace it.</p>',
-        unsafe_allow_html=True,
-    )
-    upload = st.file_uploader(
-        "Clip",
-        type=["mp4", "mov", "webm", "mkv", "avi"],
-        help="IMG_2517.mp4 is already playing. Choose a different video to replace it.",
-    )
+def demo_player(upload=None) -> None:
+    """The demo video with the live chunk text beside it. `upload` plays a different file instead."""
     extra = ""
     if upload is not None:
         saved = _save_upload(upload)
         extra = "&video=" + quote(saved.relative_to(ROOT).as_posix())
-        st.caption(f"Playing {upload.name}")
-    elif DEFAULT_VIDEO.is_file():
-        st.caption("Playing demo_data/IMG_2517.mp4")
-    else:
-        st.caption("demo_data/IMG_2517.mp4 is missing.")
-    components.html(_PLAYER.replace("__VIDEO_EXTRA__", extra), height=640, scrolling=False)
+    elif not DEFAULT_VIDEO.is_file():
+        st.info("demo_data/IMG_2517.mp4 is missing.")
+        return
+    components.html(_PLAYER.replace("__VIDEO_EXTRA__", extra), height=600, scrolling=False)

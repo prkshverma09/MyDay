@@ -6,19 +6,19 @@ My Day is a daily memory journal for an older adult living alone, or living with
 
 This is a Streamlit app for the Builders Challenge. It calls NVIDIA Cosmos Reason and Cosmos Embed1, stores clip rows in VastDB schema `reminisce`, table `clips`, and uses CoreWeave / Weights & Biases serverless inference for clip selection. The Streamlit UI is the product.
 
-The app starts with an empty journal. Upload clips you have consent to use. The ten practice clips are synthetic title cards kept in `data/practice/` for testing and the eval only. They are not recordings of a real person, and the running app does not show them.
+The app comes with one pre-loaded demo video, `demo_data/IMG_2517.mp4` (41 seconds), and its 10-second Cosmos and YOLO annotations in `demo_data/annotations.jsonl`. **Ask searches only this video.** Your own uploads appear in the My day gallery but are not searched. The ten practice clips are synthetic title cards kept in `data/practice/` for testing and the eval only. They are not recordings of a real person, and the running app does not show them.
 
 ## What a person can do
 
-- Add a clip by uploading a file, or record 8 seconds when this computer has a camera.
-- See the day as a thumbnail gallery: a 2×2 grid of four previews. Each preview is a frame labelled with the part of the day (Morning, Afternoon, or Evening) and the time. **Play** opens that clip. **Back** and **Next** move through further pages of four.
+- Watch the demo video at the top of **My day**. The text beside it follows the playhead, 10 seconds at a time, with a "seconds ago" counter. The player gets the video and the chunk text from `backend/server.py` on port 8787.
+- Add a clip by uploading a file, or press **Record** to record in the browser. The recording goes to the stream-chunk service in 15-second pieces.
+- See your own clips as a thumbnail gallery: a 2×2 grid of four previews. Each preview is a frame labelled with the part of the day (Morning, Afternoon, or Evening) and the time. **Play** opens that clip. **Back** and **Next** move through further pages of four.
 - Ask works like a chat. Type in the box at the bottom, or tap a suggested question in the first message ("Where did I put my phone?", "Did I take my medicine?", and others). Each question and its reply stay on the page; **Start again** clears them. Ask is connected to CoreWeave / W&B serverless inference at `https://api.inference.wandb.ai/v1`. The model is `meta-llama/Llama-3.1-8B-Instruct` unless `REMINISCE_LLM_MODEL` is set. The page shows `Connected to` that model when the reply came from it.
 - Watch each step happen in plain words while Ask works ("Looking through your saved clips", "Making sure the answer matches the clip"), and while a new clip is added ("Cosmos is looking at the picture", then what Cosmos saw). The steps fold away when done, and the answer types itself out. `answer_question` and `ingest_video` report these steps through an optional `progress` callback.
-- Read a grounded answer that quotes the Cosmos description and names the `clip_id` (`Source: clip_id`).
-- Play the clip the answer came from.
-- Under the answer, see search results as small picture rows: other saved clips that match, then the shared camera archive grouped by video, each with the time of the best moment, the place, the camera, the match score, and **Play**, which opens the video under that row. Archive pictures are one frame taken on the server from each returned segment. There is nothing to set: phrases like `in new york` or `this week` in the question narrow the search by themselves. **Show more** fetches up to 50 results.
+- Read a grounded answer: where in the video it happened ("At 0:10–0:20 in IMG_2517") and the one sentence of that chunk's Cosmos description that best answers the question, for example "I place the smartphone on the table next to the laptop." **Play** starts the video at that moment.
+- Under the answer, see the other matching moments as small picture rows. When nothing answers the question, the reply shows four moments of the video as a 2×2 grid of picture tiles; tap a picture to play it from there.
 - Send one clip to a carer, or take it back.
-- Open **Story** to read the day's key moments, one sentence each, from `data/memory/<today>/`.
+- Read the story of a day on **Story**. Pick the day in the date box (a calendar pops up) or step with the arrows; today is shown first. When the memory pipeline has written key moments for that day in `data/memory/<day>/`, they come first, one sentence each. Below them, each clip or demo moment that day becomes one short line under its time. `day_story` numbers the moments, asks the W&B model to shorten each description, keeps a line only when its number matches a moment, and otherwise uses the moment's own first sentence.
 
 The main row has three tabs: **My day**, **Ask**, and **Story**. **Eval** is a small button at the top of the page, shown only when an eval report exists. The carer view in `frontend/views/carer.py` is not in the main row.
 
@@ -28,21 +28,21 @@ No passive camera. No facial recognition. No medical advice. No safety-alarm fra
 
 ## How an answer stays tied to a real clip
 
-1. Ask logs in to the video search API and calls `POST /api/v1/search` once, with the question words, any filters, `top_k` 10, and `min_similarity` 0.15. The JWT stays in memory. A hit that names a journal `clip_id` is played from that clip. Otherwise Ask uses the local cosine rank (`search_day`): Cosmos Embed1 plus activity tags. Journal clips are not in the shared archive, so this is the usual path for them. Only when the journal has no match does Ask use an archive-only hit, and only at similarity 0.3 or above. The shared archive is public street and warehouse footage, so a weaker hit would show a stranger's street as her memory. The trace field `retrieval_path` is `vss` or `journal`.
+1. Ask ranks the demo video's moments locally (`search_day`): Cosmos Embed1 plus object tags, then shared words as a fallback. `answer_question` can also take a video search `searcher` for the shared archive (public street and warehouse footage, used only at similarity 0.3 or above); the app no longer passes one.
 2. The W&B model may only pick ids from that short list. Two prompts are compared in the eval: `strict` and `warm`. The app uses `warm`. The eval script still ranks the journal directly so those counts stay about the embeddings.
-3. The sentence on screen is the description plus `Source:` and the id. That id is the journal `clip_id` when the hit matches one, otherwise the segment or source id returned by search. The model's free text is kept in the trace and the eval file. It is not shown as the memory.
+3. The sentence on screen is one sentence copied from the cited moment's description, with the moment's place in the video and `Source:` its id. The model's free text is kept in the trace and the eval file. It is not shown as the memory.
 4. If the model names an id that was not retrieved, that id is dropped. If it names nothing usable, the top retrieved clip is cited instead. If nothing was retrieved, the answer is "I couldn't find that moment in your day." and it cites nothing.
 5. `get_clip` loads the row again before the sentence is built. `daily_digest` includes only clips whose `shared_with` contains the carer.
 
 ## How search on Ask works
 
-Ask makes one archive search call. Its hits feed the grounded answer above and the result list below, and the result list skips anything the answer already shows.
+Ask searches only the demo video. The shared camera archive is not called from the app.
 
-1. `parse_query` lifts a time phrase (`last hour`, `today`, `this week`, `this month`) and a place name from `/api/v1/metadata/schema` out of the words. Cameras, kinds, and objects are left in the words, because words like `traffic` or `person` are usually what is being searched for.
-2. Saved clips: `find_clips` keeps a clip only when a search word shares a stem with its tags or Cosmos description, then orders by Embed1 cosine. Some title-card embeddings sit near every query, so cosine alone never admits a clip. The time window applies. Place, camera, kind, and object filters do not, because journal clips have none.
-3. Camera archive: `POST /api/v1/search` with `time_filter` (or a `custom` 30-day range) and `metadata_filters`. The page shows `chunk_results`: one card per video, pointed at its best segment. **Play** downloads that segment through `/api/v1/videos/stream` on the server, so the JWT never reaches the browser.
-4. `llm_synthesis` is shown only inside **What the search model says**, labelled as model text. It is never used as a memory.
-5. Every search writes a `search` row to `data/journal/traces.jsonl` with the words, filters, ids shown, and latency.
+1. `reminisce/demo.py` turns each annotated chunk of `IMG_2517.mp4` into one moment: a clip id like `clip_2517_010`, its start second, the joined Cosmos sentences, and the YOLO objects seen at least three times. Embed1 vectors for the chunk text are cached in `data/journal/demo_embeddings.json`. The moments count as recorded at the video file's time, so they belong to today.
+2. `answer_question` ranks the moments by Embed1 cosine plus an object-tag bonus. If that admits nothing, the moment sharing the most words with the question is used. The W&B model picks from that short list, and the answer cites the moment.
+3. `key_sentence` shows the one sentence of the cited chunk's own description that best answers the question. For "where did I put…" questions it prefers a sentence about placing something.
+4. `find_clips` lists other moments that share a word with the question. A time phrase (`this morning`, `today`) narrows the moments by time.
+5. Every search writes a `search` row to `data/journal/traces.jsonl` with the words, the video, the moments shown, and latency.
 
 ## Architecture
 
@@ -185,7 +185,13 @@ Run the unit tests. They need no clips and no network:
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Start the app. Leave this command running. The journal starts empty, under `data/journal/`.
+Start the demo video backend for the My day player. Leave it running.
+
+```bash
+.venv/bin/python backend/server.py
+```
+
+Start the app. Leave this command running. Your own clips go under `data/journal/`.
 
 ```bash
 .venv/bin/streamlit run frontend/app.py

@@ -258,6 +258,127 @@ button[data-testid^="stBaseButton-"]:disabled {
   padding: 0.2rem 0.8rem !important;
 }
 [class*="st-key-shown-row-"] [data-testid="stVerticalBlock"] { gap: 0.3rem; }
+[class*="st-key-shown-tile-"] {
+  padding: 0.4rem !important;
+  border-radius: 20px !important;
+}
+[class*="st-key-story-picker"] [data-testid="stDateInput"] input {
+  min-height: 56px;
+  text-align: center;
+  font-size: 22px !important;
+  font-weight: 600;
+  color: #44341D;
+}
+[class*="st-key-story-picker"] [data-testid="stDateInput"] > div > div {
+  border-radius: 999px !important;
+  background: rgba(253, 248, 245, 0.85) !important;
+  border: 1.5px solid rgba(228, 213, 196, 0.95) !important;
+}
+[data-testid="stMarkdownContainer"] p.demo-head {
+  margin: 0.2rem 0 0 !important;
+  font-size: 20px !important;
+  color: #44341D !important;
+}
+p.demo-head span { font-weight: 700; }
+.story-card {
+  margin-top: 0.6rem;
+  padding: 1.4rem 1.5rem 1.1rem;
+  border-radius: 28px;
+  background: rgba(253, 248, 245, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 16px 36px rgba(68, 52, 29, 0.07);
+  color: #44341D;
+}
+.story-card p { margin: 0; color: #44341D; }
+.story-card .story-date {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.story-card .story-intro { margin: 0.2rem 0 1rem; font-size: 18px; opacity: 0.75; }
+.story-card .story-empty { margin-top: 0.4rem; font-size: 20px; opacity: 0.8; }
+.story-line { position: relative; padding-left: 0.2rem; }
+.story-line::before {
+  content: "";
+  position: absolute;
+  left: 2.1rem;
+  top: 0.6rem;
+  bottom: 0.6rem;
+  width: 1.5px;
+  background: rgba(82, 115, 94, 0.25);
+}
+.story-row {
+  position: relative;
+  display: flex;
+  gap: 1.4rem;
+  align-items: baseline;
+  padding: 0.45rem 0;
+}
+.story-time {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  min-width: 3.9rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: #ECE0D4;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+}
+.story-text { font-size: 21px; line-height: 1.4; }
+.story-card .story-source { margin-top: 0.9rem; font-size: 14px; opacity: 0.6; }
+[class*="st-key-shown-tile-"] [data-testid="stVerticalBlock"] { gap: 0.3rem; }
+div[class*="st-key-shown-tile-"][class*="st-key-shown-tile-"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+[class*="st-key-tile-play-"] button {
+  height: 132px !important;
+  min-height: 132px !important;
+  padding: 0 !important;
+  border-radius: 20px !important;
+  border: 1px solid rgba(255, 255, 255, 0.85) !important;
+  background-color: #ECE0D4 !important;
+  background-size: cover !important;
+  background-position: center !important;
+  box-shadow: 0 10px 24px rgba(68, 52, 29, 0.10) !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+[class*="st-key-tile-play-"] button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(68, 52, 29, 0.16) !important;
+}
+[class*="st-key-tile-play-"] button p { display: none !important; }
+[class*="st-key-tile-play-"] button [data-testid="stIconMaterial"] {
+  width: 52px !important;
+  min-width: 52px !important;
+  height: 52px !important;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px !important;
+  color: #FFFFFF !important;
+  background: rgba(255, 255, 255, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  margin: 0 !important;
+}
+[data-testid="stMarkdownContainer"] p.tile-when {
+  margin: 0 !important;
+  text-align: center !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  color: #44341D !important;
+}
 [class*="st-key-ask-suggestion"] button {
   min-height: 48px !important;
   border-radius: 999px !important;

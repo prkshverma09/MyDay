@@ -194,9 +194,27 @@ def choose_aliases(raw: str, aliases: list[str]) -> list[str]:
     return chosen
 
 
+def shared_words(query: str, clip: Clip) -> int:
+    """How many search words share a stem with the clip's tags or description."""
+    have = _content_words(" ".join(clip.activity_tags) + " " + clip.cosmos_description)
+    count = 0
+    for word in _content_words(query):
+        if any(word == other or (min(len(word), len(other)) >= 4 and (word.startswith(other) or other.startswith(word))) for other in have):
+            count += 1
+    return count
+
+
 def _journal_hits(question: str, visible: list[Clip], query_vector: list[float]) -> tuple[list[Hit], list[Hit]]:
+    """Cosine and tags first. If they admit nothing, the clip that shares the most words with the question."""
     ranked = rank_clips(question, visible, query_vector)
-    return ranked, select_hits(ranked)
+    hits = select_hits(ranked)
+    if not hits:
+        worded = [(shared_words(question, hit.clip), hit) for hit in ranked]
+        worded = [pair for pair in worded if pair[0]]
+        if worded:
+            worded.sort(key=lambda pair: (pair[0], pair[1].cosine), reverse=True)
+            hits = [worded[0][1]]
+    return ranked, hits
 
 
 def answer_question(
@@ -423,3 +441,85 @@ def story(clips: list[Clip], *, owner_id: str) -> Answer:
         grounded=is_grounded(text, cited, corpus_ids) if cited else True,
         tools=["story", "get_clip"],
     )
+
+
+DAY_STORY_PROMPT = (
+    "You turn short descriptions of numbered video moments from one person's day into a calm, simple story. "
+    "Rewrite each moment as one short sentence addressed to them as 'you', at most 14 words, "
+    "about the main thing they do in it. "
+    "Use only what that moment's description says. Do not add people, food, feelings, or places that are not written there. "
+    "Reply with exactly one line per moment, formatted as N | sentence, where N is the moment's number. Nothing else."
+)
+DAY_LINE_RE = re.compile(r"^\s*(\d{1,3})\s*[|.):\-–—]\s*(.+?)\s*$")
+
+
+@dataclass
+class DayStory:
+    day: str
+    moments: list[tuple[str, str, Clip]]
+    model: str = "template"
+
+
+def _clock(clip: Clip, *, seconds: bool = False) -> str:
+    try:
+        return datetime.fromisoformat(clip.recorded_at).strftime("%H:%M:%S" if seconds else "%H:%M")
+    except ValueError:
+        return ""
+
+
+def _plain_sentence(description: str, limit: int = 14) -> str:
+    first = re.split(r"(?<=[.!?])\s+", " ".join((description or "").split()), maxsplit=1)[0]
+    words = first.rstrip(".!?").split()
+    text = " ".join(words[:limit]) + ("…" if len(words) > limit else ".")
+    return text[:1].upper() + text[1:]
+
+
+def clips_on(clips: list[Clip], day, *, owner_id: str) -> list[Clip]:
+    """The owner's clips recorded on `day` (a date), in time order."""
+    found = []
+    for clip in clips_for_viewer(clips, role="owner", owner_id=owner_id, carer_id=""):
+        try:
+            when = datetime.fromisoformat(clip.recorded_at)
+        except ValueError:
+            continue
+        if when.date() == day:
+            found.append(clip)
+    return sorted(found, key=lambda clip: clip.recorded_at)
+
+
+def day_story(clips: list[Clip], day, *, owner_id: str, llm=None) -> DayStory:
+    """One short sentence per clip on that day, in time order, each under the clip's own time.
+
+    The model may only shorten a description. Its lines are matched to moments by number;
+    any moment without a usable line falls back to its own first sentence. Times show
+    seconds when two moments fall in the same minute.
+    """
+    moments_on_day = clips_on(clips, day, owner_id=owner_id)
+    story = DayStory(day=day.isoformat(), moments=[])
+    if not moments_on_day:
+        return story
+    written: dict[int, str] = {}
+    if llm is not None:
+        listing = "\n".join(
+            f"{number} | {' '.join(clip.cosmos_description.split())}" for number, clip in enumerate(moments_on_day, 1)
+        )
+        try:
+            reply = llm.complete(DAY_STORY_PROMPT, listing, max_tokens=40 * len(moments_on_day) + 40)
+            story.model = getattr(llm, "model", "model")
+        except ModelError:
+            reply = ""
+        for line in reply.splitlines():
+            matched = DAY_LINE_RE.match(line)
+            if not matched or CLIP_ID_RE.search(matched.group(2)):
+                continue
+            number = int(matched.group(1))
+            if 1 <= number <= len(moments_on_day) and number not in written:
+                written[number] = matched.group(2).strip()
+    minutes = [_clock(clip) for clip in moments_on_day]
+    crowded = len(set(minutes)) < len(minutes)
+    for number, clip in enumerate(moments_on_day, 1):
+        sentence = written.get(number) or _plain_sentence(clip.cosmos_description)
+        story.moments.append((_clock(clip, seconds=crowded), sentence, clip))
+    if not written:
+        story.model = "template"
+    return story

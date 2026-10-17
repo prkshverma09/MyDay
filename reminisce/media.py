@@ -86,9 +86,9 @@ def validate_duration(seconds: float) -> None:
         )
 
 
-def extract_frame(video: Path, image: Path) -> Path:
+def extract_frame(video: Path, image: Path, at: float = 1.0) -> Path:
     image.parent.mkdir(parents=True, exist_ok=True)
-    _run(["ffmpeg", "-y", "-ss", "1", "-i", str(video), "-frames:v", "1", str(image)])
+    _run(["ffmpeg", "-y", "-ss", f"{at:.2f}", "-i", str(video), "-frames:v", "1", str(image)])
     return image
 
 

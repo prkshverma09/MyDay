@@ -8,14 +8,16 @@ from datetime import datetime
 
 import streamlit as st
 
-from frontend.views.common import PREVIEW, _clip_detail, _greeting, _query_open, _thumb_slot
+from frontend.views.common import PREVIEW, _clip_detail, _first_upper, _greeting, _query_open, _thumb_slot
+from frontend.views.clip import demo_player
 from frontend.views.progress import NOTE, Steps
 from frontend.views.recorder import render_recorder
+from reminisce.demo import DEMO_VIDEO, demo_name, recorded_base
 from reminisce.ingest import ingest_video
 from reminisce.media import MediaError, normalize_upload
 from reminisce.models import ModelError
 from reminisce.settings import CLIPS_DIR, MAX_CLIP_SECONDS, MIN_CLIP_SECONDS
-from reminisce.store import load_clips, next_clip_id
+from reminisce.store import human_when, load_clips, next_clip_id
 from reminisce.tracing import safe_error
 
 def _add_box(prefs: dict) -> None:
@@ -45,8 +47,21 @@ def _add_box(prefs: dict) -> None:
     if add and upload is not None:
         _accept_upload(upload, tag_list, prefs)
 
+def _demo_card() -> None:
+    if not DEMO_VIDEO.is_file():
+        return
+    when = _first_upper(human_when(recorded_base().isoformat()))
+    st.markdown(
+        f'<p class="demo-head"><span>{html.escape(demo_name())}</span> · {html.escape(when)}</p>'
+        '<p class="quiet-note">The text follows the video, 10 seconds at a time. Ask searches this video.</p>',
+        unsafe_allow_html=True,
+    )
+    demo_player()
+
+
 def _page_day(prefs: dict) -> None:
     st.markdown(f'<p class="greeting">{html.escape(_greeting())}</p>', unsafe_allow_html=True)
+    _demo_card()
     clips = [clip for clip in load_clips() if clip.owner_id == prefs["owner_id"]]
     adding = bool(st.session_state.get("adding"))
     if st.button(
@@ -57,10 +72,9 @@ def _page_day(prefs: dict) -> None:
     ):
         st.session_state["adding"] = not adding
         st.rerun()
-    if adding or not clips:
+    if adding:
         _add_box(prefs)
     if not clips:
-        st.info("No clips yet.")
         return
     chosen = _query_open()
     if chosen:
