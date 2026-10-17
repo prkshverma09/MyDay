@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Day — chunk descriptions</title>
+  <style>
+    :root {
+      --bg: #f4efe8;
+      --ink: #2b241c;
+      --muted: #6e6258;
+      --card: #fffdfb;
+      --line: #e3d7cb;
+      --accent: #3d6b54;
+      --highlight: #e8f3ec;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      display: flex;
+      flex-direction: column;
+    }
+    header { padding: 18px 24px 6px; }
+    header h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    header p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+    main {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
+      gap: 16px;
+      padding: 12px 24px 20px;
+    }
+    .stage, .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      min-height: 0;
+    }
+    .stage {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 12px;
+    }
+    video {
+      width: 100%;
+      max-height: calc(100vh - 120px);
+      border-radius: 10px;
+      background: #161616;
+    }
+    .panel { display: flex; flex-direction: column; }
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    #range {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      font-size: 18px;
+    }
+    #ago {
+      color: var(--accent);
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    #text {
+      overflow: auto;
+      padding: 14px 16px 18px;
+      font-size: 16px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    #text.pending { color: var(--muted); }
+    @media (max-width: 860px) {
+      main { grid-template-columns: 1fr; overflow: auto; }
+      video { max-height: 46vh; }
+      .panel { min-height: 360px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Chunk descriptions</h1>
+    <p>One continuous video. The text is the full Cosmos description of the 10-second chunk under the playhead.</p>
+  </header>
+  <main>
+    <section class="stage">
+      <video id="video" controls playsinline preload="metadata" src="/video"></video>
+    </section>
+    <section class="panel">
+      <div class="meta">
+        <div id="range">…</div>
+        <div id="ago"></div>
+      </div>
+      <div id="text" class="pending">Describing this moment…</div>
+    </section>
+  </main>
+  <script>
+    const video = document.getElementById("video");
+    const range = document.getElementById("range");
+    const ago = document.getElementById("ago");
+    const text = document.getElementById("text");
+    let shown = null;
+    let inflight = false;
+    let queued = false;
+
+    function integerSecond(value) {
+      return Math.max(0, Math.floor(Number(value) || 0));
+    }
+
+    function covers(record, time) {
+      if (!record) return false;
+      const start = Number(record.start_sec);
+      const end = Number(record.end_sec);
+      if (time < start - 0.05) return false;
+      if (record.is_last) return time <= end + 0.05;
+      return time < end - 0.001;
+    }
+
+    function paint(record) {
+      range.textContent = integerSecond(record.start_sec) + "–" + integerSecond(record.end_sec) + "s";
+      ago.textContent = Number(record.seconds_ago) + " seconds ago";
+      text.classList.remove("pending");
+      text.textContent = record.cosmos_text || "No description.";
+    }
+
+    async function sync() {
+      const time = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+      if (covers(shown, time)) return;
+      if (inflight) {
+        queued = true;
+        return;
+      }
+      inflight = true;
+      queued = false;
+      if (!shown) {
+        text.classList.add("pending");
+        text.textContent = "Describing this moment…";
+      }
+      try {
+        const response = await fetch("/chunk?t=" + encodeURIComponent(time.toFixed(3)) + "&chunk=10");
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || ("HTTP " + response.status));
+        const now = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+        if (covers(payload, now)) {
+          shown = payload;
+          paint(payload);
+        } else {
+          queued = true;
+        }
+      } catch (error) {
+        text.classList.add("pending");
+        text.textContent = error.message || "Could not describe this chunk.";
+      } finally {
+        inflight = false;
+        if (queued) sync();
+      }
+    }
+
+    video.addEventListener("timeupdate", sync);
+    video.addEventListener("seeked", sync);
+    video.addEventListener("loadedmetadata", sync);
+    video.addEventListener("play", sync);
+    sync();
+  </script>
+</body>
+</html>

@@ -21,6 +21,7 @@ from reminisce import vast_index
 PREVIEW = 4
 
 NAV = (
+    ("Clip", "nav-clip", ":material/play_circle:"),
     ("My day", "nav-day", ":material/home:"),
     ("Ask", "nav-ask", ":material/chat_bubble:"),
     ("Story", "nav-story", ":material/auto_stories:"),
