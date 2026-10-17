@@ -1,0 +1,4 @@
+0:20–0:25  You switched the kettle on in the kitchen.
+0:40–0:45  You heard the kettle click off in the kitchen.
+0:00–0:45  You read a book.
+0:45–1:00  You read a book.

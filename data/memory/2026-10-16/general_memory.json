@@ -1,0 +1,640 @@
+[
+  {
+    "text": "0:00–0:05  You walked toward the counter in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 0.0,
+      "end_sec": 5.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_001_of_012.mp4"
+    },
+    "id": "ann_h001",
+    "window_id": "ann_h001",
+    "window_ids": [
+      "ann_h001"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 0.0,
+      "end_sec": 5.0
+    },
+    "time_frame": {
+      "start_sec": 0.0,
+      "end_sec": 5.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_001_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You walked toward the counter in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "chair",
+        "position": "right/far"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.15,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:05–0:10  You lifted the electric kettle by its handle in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 5.0,
+      "end_sec": 10.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_002_of_012.mp4"
+    },
+    "id": "ann_h002",
+    "window_id": "ann_h002",
+    "window_ids": [
+      "ann_h002"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 5.0,
+      "end_sec": 10.0
+    },
+    "time_frame": {
+      "start_sec": 5.0,
+      "end_sec": 10.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_002_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You lifted the electric kettle by its handle in the kitchen.",
+    "actors": [],
+    "objects": [],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:10–0:15  You carry the kettle to the sink and set it under the tap in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 10.0,
+      "end_sec": 15.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_003_of_012.mp4"
+    },
+    "id": "ann_h003",
+    "window_id": "ann_h003",
+    "window_ids": [
+      "ann_h003"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 10.0,
+      "end_sec": 15.0
+    },
+    "time_frame": {
+      "start_sec": 10.0,
+      "end_sec": 15.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_003_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You carry the kettle to the sink and set it under the tap in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "sink",
+        "position": "center/far"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:15–0:20  You filled the kettle with water at the sink in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 15.0,
+      "end_sec": 20.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_004_of_012.mp4"
+    },
+    "id": "ann_h004",
+    "window_id": "ann_h004",
+    "window_ids": [
+      "ann_h004"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 15.0,
+      "end_sec": 20.0
+    },
+    "time_frame": {
+      "start_sec": 15.0,
+      "end_sec": 20.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_004_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You filled the kettle with water at the sink in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "sink",
+        "position": "center/far"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:20–0:25  You set the filled kettle on its base on the counter in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 20.0,
+      "end_sec": 25.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_005_of_012.mp4"
+    },
+    "id": "ann_h005#1",
+    "window_id": "ann_h005",
+    "window_ids": [
+      "ann_h005"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 20.0,
+      "end_sec": 25.0
+    },
+    "time_frame": {
+      "start_sec": 20.0,
+      "end_sec": 25.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_005_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You set the filled kettle on its base on the counter in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "microwave",
+        "position": "right/far"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:25–0:30  You lean on the counter with both hands, waiting in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 25.0,
+      "end_sec": 30.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_006_of_012.mp4"
+    },
+    "id": "ann_h006",
+    "window_id": "ann_h006",
+    "window_ids": [
+      "ann_h006"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 25.0,
+      "end_sec": 30.0
+    },
+    "time_frame": {
+      "start_sec": 25.0,
+      "end_sec": 30.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_006_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You lean on the counter with both hands, waiting in the kitchen.",
+    "actors": [],
+    "objects": [],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:30–0:35  You opened a wall cupboard and took out a white mug in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 30.0,
+      "end_sec": 35.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_007_of_012.mp4"
+    },
+    "id": "ann_h007#1",
+    "window_id": "ann_h007",
+    "window_ids": [
+      "ann_h007"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 30.0,
+      "end_sec": 35.0
+    },
+    "time_frame": {
+      "start_sec": 30.0,
+      "end_sec": 35.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_007_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You opened a wall cupboard and took out a white mug in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "cup",
+        "position": "center/near"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:30–0:35  You set the mug on the counter beside the kettle in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 30.0,
+      "end_sec": 35.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_007_of_012.mp4"
+    },
+    "id": "ann_h007#2",
+    "window_id": "ann_h007",
+    "window_ids": [
+      "ann_h007"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 30.0,
+      "end_sec": 35.0
+    },
+    "time_frame": {
+      "start_sec": 30.0,
+      "end_sec": 35.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_007_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You set the mug on the counter beside the kettle in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "cup",
+        "position": "center/near"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:35–0:40  You dropped a tea bag into the mug in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 35.0,
+      "end_sec": 40.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_008_of_012.mp4"
+    },
+    "id": "ann_h008",
+    "window_id": "ann_h008",
+    "window_ids": [
+      "ann_h008"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 35.0,
+      "end_sec": 40.0
+    },
+    "time_frame": {
+      "start_sec": 35.0,
+      "end_sec": 40.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_008_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You dropped a tea bag into the mug in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "cup",
+        "position": "center/near"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:40–0:45  You picked the kettle up by its handle in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 40.0,
+      "end_sec": 45.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_009_of_012.mp4"
+    },
+    "id": "ann_h009#2",
+    "window_id": "ann_h009",
+    "window_ids": [
+      "ann_h009"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 40.0,
+      "end_sec": 45.0
+    },
+    "time_frame": {
+      "start_sec": 40.0,
+      "end_sec": 45.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_009_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You picked the kettle up by its handle in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "cup",
+        "position": "center/near"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:45–0:50  You pour hot water from the kettle into the mug in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 45.0,
+      "end_sec": 50.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_010_of_012.mp4"
+    },
+    "id": "ann_h010",
+    "window_id": "ann_h010",
+    "window_ids": [
+      "ann_h010"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 45.0,
+      "end_sec": 50.0
+    },
+    "time_frame": {
+      "start_sec": 45.0,
+      "end_sec": 50.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_010_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You pour hot water from the kettle into the mug in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "cup",
+        "position": "center/near"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:50–0:55  You stir the mug with a spoon in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 50.0,
+      "end_sec": 55.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_011_of_012.mp4"
+    },
+    "id": "ann_h011#1",
+    "window_id": "ann_h011",
+    "window_ids": [
+      "ann_h011"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 50.0,
+      "end_sec": 55.0
+    },
+    "time_frame": {
+      "start_sec": 50.0,
+      "end_sec": 55.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_011_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You stir the mug with a spoon in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "cup",
+        "position": "center/near"
+      },
+      {
+        "label": "spoon",
+        "position": "center/near"
+      },
+      {
+        "label": "refrigerator",
+        "position": "left/far"
+      },
+      {
+        "label": "bottle",
+        "position": "center/near"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:50–0:55  You open the refrigerator and take out a bottle of milk in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 50.0,
+      "end_sec": 55.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_011_of_012.mp4"
+    },
+    "id": "ann_h011#2",
+    "window_id": "ann_h011",
+    "window_ids": [
+      "ann_h011"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 50.0,
+      "end_sec": 55.0
+    },
+    "time_frame": {
+      "start_sec": 50.0,
+      "end_sec": 55.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_011_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You open the refrigerator and take out a bottle of milk in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "cup",
+        "position": "center/near"
+      },
+      {
+        "label": "spoon",
+        "position": "center/near"
+      },
+      {
+        "label": "refrigerator",
+        "position": "left/far"
+      },
+      {
+        "label": "bottle",
+        "position": "center/near"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:55–1:00  You pour milk from the bottle into the mug in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 55.0,
+      "end_sec": 60.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_012_of_012.mp4"
+    },
+    "id": "ann_h012#1",
+    "window_id": "ann_h012",
+    "window_ids": [
+      "ann_h012"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 55.0,
+      "end_sec": 60.0
+    },
+    "time_frame": {
+      "start_sec": 55.0,
+      "end_sec": 60.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_012_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You pour milk from the bottle into the mug in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "cup",
+        "position": "center/near"
+      },
+      {
+        "label": "bottle",
+        "position": "center/near"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:55–1:00  You pick the mug up with both hands and turn toward the door in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 55.0,
+      "end_sec": 60.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_012_of_012.mp4"
+    },
+    "id": "ann_h012#2",
+    "window_id": "ann_h012",
+    "window_ids": [
+      "ann_h012"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 55.0,
+      "end_sec": 60.0
+    },
+    "time_frame": {
+      "start_sec": 55.0,
+      "end_sec": 60.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_012_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You pick the mug up with both hands and turn toward the door in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "cup",
+        "position": "center/near"
+      },
+      {
+        "label": "bottle",
+        "position": "center/near"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:45–0:50  You reached for the mug on the side table and takes a sip of tea in the living room.",
+    "video": {
+      "camera_id": "living_room_cam-1",
+      "start_sec": 45.0,
+      "end_sec": 50.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_010_of_012.mp4"
+    },
+    "id": "ann_h022#1",
+    "window_id": "ann_h022",
+    "window_ids": [
+      "ann_h022"
+    ],
+    "camera_id": "living_room_cam-1",
+    "location": "home_living_room",
+    "window": {
+      "start_sec": 45.0,
+      "end_sec": 50.0
+    },
+    "time_frame": {
+      "start_sec": 45.0,
+      "end_sec": 50.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_010_of_012.mp4"
+    },
+    "store": "general",
+    "key_reason": null,
+    "statement": "You reached for the mug on the side table and takes a sip of tea in the living room.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "book",
+        "position": "center/near"
+      },
+      {
+        "label": "cup",
+        "position": "right/near"
+      },
+      {
+        "label": "couch",
+        "position": "center/near"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.4,
+    "day": "2026-10-16"
+  }
+]

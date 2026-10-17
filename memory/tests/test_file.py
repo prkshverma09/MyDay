@@ -531,6 +531,21 @@ def _window(window_id, location, sentences, yolo):
     }
 
 
+def test_demo_clip_keeps_the_phone_and_not_red_bull():
+    demo = Path(__file__).parents[2] / "demo_data" / "annotations.jsonl"
+    filed = file_records(load_records(demo))
+    statements = [entry["statement"] for entry in filed["entries"]]
+    assert not any(statement.startswith("Red ") for statement in statements)
+    phone = [
+        entry
+        for entry in filed["key"]
+        if entry["key_reason"] == "object put down or picked up" and "phone" in entry["statement"].lower()
+    ]
+    assert len(phone) == 1
+    assert phone[0]["time_frame"]["start_sec"] == 10.0
+    assert phone[0]["time_frame"]["end_sec"] == 20.0
+
+
 def test_model_failure_uses_the_text(tmp_path):
     filed = file_records(load_records(HOME), llm=_Scripted(RuntimeError("down")))
     assert filed["key"][0]["statement"].startswith("You put your keys")

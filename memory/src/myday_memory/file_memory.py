@@ -44,10 +44,13 @@ _NEW_FACT = re.compile(
     re.IGNORECASE,
 )
 _PLACE_VERB = re.compile(
-    r"\b(put|puts|set|sets|drop|drops|dropped|pick|picks|picked|left|hang|hangs|hung)\b",
+    r"\b(put|puts|place|places|placed|set|sets|drop|drops|dropped|pick|picks|picked|left|hang|hangs|hung)\b",
     re.IGNORECASE,
 )
-_TRACKED = re.compile(r"\b(keys|key|glasses|hearing aid|phone|handbag)\b", re.IGNORECASE)
+_TRACKED = re.compile(
+    r"\b(keys|key|glasses|hearing aid|smartphones?|cell phones?|phones?|handbag)\b",
+    re.IGNORECASE,
+)
 _DOOR = re.compile(r"\b(front door|the door)\b", re.IGNORECASE)
 _DOOR_ACT = re.compile(
     r"\b(open|opens|opened|comes home|returns home|leaves home|goes out)\b",
@@ -107,7 +110,7 @@ _ACTION = re.compile(
     r"\b(fill|fills|filled|pour|pours|poured|walk|walks|walked|pick|picks|picked|"
     r"open|opens|opened|press|presses|pressed|set|sets|drop|drops|dropped|"
     r"carry|carries|carried|turn|turns|turned|flip|flips|flipped|feed|feeds|"
-    r"put|puts|lock|locks|unlock|unlocks|read|reads|reading|enter|enters|"
+    r"put|puts|place|places|placed|lock|locks|unlock|unlocks|read|reads|enter|enters|"
     r"entered|run|runs|running|click|clicks|tip|tips|tipped|lift|lifts|"
     r"lifted|reach|reaches|reached|knock|knocks|knocked)\b",
     re.IGNORECASE,
@@ -150,6 +153,8 @@ _PAST = {
     "unlocks": "unlocked",
     "put": "put",
     "puts": "put",
+    "place": "placed",
+    "places": "placed",
     "read": "read",
     "reads": "read",
     "sit": "sat",
@@ -933,8 +938,19 @@ def _other_names(sentences: list[str]) -> list[str]:
                 continue
             if _sentence_starts_with(visible, name) and not _person_context(sentence):
                 continue
+            if _brand_word(visible, name) and not _person_context(sentence):
+                continue
             found.append(name)
     return found
+
+
+def _brand_word(sentence: str, name: str) -> bool:
+    """Two capitalized words together are a label, such as Red Bull, not a visitor."""
+
+    return re.search(
+        rf"\b{re.escape(name)}\s+[A-Z][a-z]{{2,}}\b|\b[A-Z][a-z]{{2,}}\s+{re.escape(name)}\b",
+        sentence,
+    ) is not None
 
 
 def _sentence_starts_with(sentence: str, name: str) -> bool:
@@ -1123,6 +1139,8 @@ def _canonical_object(label: str) -> str | None:
     text = label.lower()
     if text in {"key", "keys"}:
         return "keys"
+    if text in {"phone", "phones", "smartphone", "smartphones", "cell phone", "cellphone"}:
+        return "phone"
     if text in TRACKED:
         return text
     return None
@@ -1170,13 +1188,16 @@ def _first_sentence(sentences: list[str]) -> str:
 
 
 def _as_you(sentence: str) -> str:
-    text = re.sub(
-        r"^(Her (?:left |right )?hands?|Her finger|She|Margaret|The woman|A woman)\b",
-        "You",
-        sentence.strip(),
-        count=1,
-        flags=re.IGNORECASE,
-    )
+    stripped = sentence.strip()
+    text = re.sub(r"^I am\b", "You were", stripped, count=1, flags=re.IGNORECASE)
+    if text == stripped:
+        text = re.sub(
+            r"^(Her (?:left |right )?hands?|Her finger|She|Margaret|The woman|A woman|The person|I)\b",
+            "You",
+            stripped,
+            count=1,
+            flags=re.IGNORECASE,
+        )
     match = re.match(r"^You\s+(\w+)(.*)$", text, flags=re.IGNORECASE)
     if match:
         verb = _PAST.get(match.group(1).lower(), match.group(1))

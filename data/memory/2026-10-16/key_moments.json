@@ -1,0 +1,212 @@
+[
+  {
+    "text": "0:20–0:25  You switched the kettle on in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 20.0,
+      "end_sec": 25.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_005_of_012.mp4"
+    },
+    "id": "ann_h005#2",
+    "window_id": "ann_h005",
+    "window_ids": [
+      "ann_h005"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 20.0,
+      "end_sec": 25.0
+    },
+    "time_frame": {
+      "start_sec": 20.0,
+      "end_sec": 25.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_005_of_012.mp4"
+    },
+    "store": "key",
+    "key_reason": "appliance on or off",
+    "statement": "You switched the kettle on in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "microwave",
+        "position": "right/far"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.9,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:40–0:45  You heard the kettle click off in the kitchen.",
+    "video": {
+      "camera_id": "kitchen_cam-1",
+      "start_sec": 40.0,
+      "end_sec": 45.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_009_of_012.mp4"
+    },
+    "id": "ann_h009#1",
+    "window_id": "ann_h009",
+    "window_ids": [
+      "ann_h009"
+    ],
+    "camera_id": "kitchen_cam-1",
+    "location": "home_kitchen",
+    "window": {
+      "start_sec": 40.0,
+      "end_sec": 45.0
+    },
+    "time_frame": {
+      "start_sec": 40.0,
+      "end_sec": 45.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0000_segment_009_of_012.mp4"
+    },
+    "store": "key",
+    "key_reason": "appliance on or off",
+    "statement": "You heard the kettle click off in the kitchen.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "cup",
+        "position": "center/near"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.9,
+    "day": "2026-10-16"
+  },
+  {
+    "text": "0:00–0:45  You read a book.",
+    "video": {
+      "camera_id": "living_room_cam-1",
+      "start_sec": 0.0,
+      "end_sec": 45.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_001_of_012.mp4",
+      "sources": [
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_001_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_002_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_003_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_004_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_005_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_006_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_007_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_008_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_009_of_012.mp4"
+      ]
+    },
+    "id": "ann_h013#1",
+    "window_id": "ann_h013",
+    "window_ids": [
+      "ann_h013",
+      "ann_h014",
+      "ann_h015",
+      "ann_h016",
+      "ann_h017",
+      "ann_h018",
+      "ann_h019",
+      "ann_h020",
+      "ann_h021"
+    ],
+    "day": "2026-10-16",
+    "camera_id": "living_room_cam-1",
+    "location": "home_living_room",
+    "window": {
+      "start_sec": 0.0,
+      "end_sec": 45.0
+    },
+    "time_frame": {
+      "start_sec": 0.0,
+      "end_sec": 45.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_001_of_012.mp4",
+      "sources": [
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_001_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_002_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_003_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_004_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_005_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_006_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_007_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_008_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_009_of_012.mp4"
+      ]
+    },
+    "store": "key",
+    "key_reason": "reading",
+    "statement": "You read a book.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "cup",
+        "position": "center/near"
+      },
+      {
+        "label": "couch",
+        "position": "right/far"
+      },
+      {
+        "label": "book",
+        "position": "center/near"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.7
+  },
+  {
+    "text": "0:45–1:00  You read a book.",
+    "video": {
+      "camera_id": "living_room_cam-1",
+      "start_sec": 45.0,
+      "end_sec": 60.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_010_of_012.mp4",
+      "sources": [
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_010_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_011_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_012_of_012.mp4"
+      ]
+    },
+    "id": "ann_h022#2",
+    "window_id": "ann_h022",
+    "window_ids": [
+      "ann_h022",
+      "ann_h023",
+      "ann_h024"
+    ],
+    "day": "2026-10-16",
+    "camera_id": "living_room_cam-1",
+    "location": "home_living_room",
+    "window": {
+      "start_sec": 45.0,
+      "end_sec": 60.0
+    },
+    "time_frame": {
+      "start_sec": 45.0,
+      "end_sec": 60.0,
+      "source": "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_010_of_012.mp4",
+      "sources": [
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_010_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_011_of_012.mp4",
+        "s3://team-20-vss-chunks-segments/segments/home_tea_and_reading_chunk_0001_segment_012_of_012.mp4"
+      ]
+    },
+    "store": "key",
+    "key_reason": "reading",
+    "statement": "You read a book.",
+    "actors": [],
+    "objects": [
+      {
+        "label": "book",
+        "position": "center/near"
+      },
+      {
+        "label": "cup",
+        "position": "right/near"
+      },
+      {
+        "label": "couch",
+        "position": "center/near"
+      }
+    ],
+    "appointment": null,
+    "importance": 0.7
+  }
+]

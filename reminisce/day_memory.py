@@ -3,12 +3,26 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date
 from pathlib import Path
 
 from reminisce.settings import ROOT
 
 MEMORY_DIR = ROOT / "data" / "memory"
+
+
+def filed_days(directory: Path | None = None) -> list[str]:
+    """Calendar days that already have a memory folder, oldest first."""
+
+    root = directory or MEMORY_DIR
+    if not root.is_dir():
+        return []
+    return sorted(
+        path.name
+        for path in root.iterdir()
+        if path.is_dir() and re.fullmatch(r"\d{4}-\d{2}-\d{2}", path.name)
+    )
 
 
 def load_key_moments(day: str | None = None, directory: Path | None = None) -> list[dict]:
@@ -45,32 +59,45 @@ def _from_text(path: Path) -> list[dict]:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
         return []
+    folder_day = path.parent.name
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", folder_day):
+        folder_day = ""
     moments = []
     for line in lines:
-        day, statement = _split_line(line)
-        moment = _moment(statement, line, day, "")
+        day, _span, statement = _split_line(line)
+        moment = _moment(statement, line, day or folder_day, "")
         if moment is not None:
             moments.append(moment)
     return moments
 
 
 def _moment(statement, text, day, location) -> dict | None:
-    sentence = str(statement or "").strip()
-    if not sentence:
-        _day, sentence = _split_line(str(text or ""))
-        day = day or _day
+    parsed_day, span, parsed_sentence = _split_line(str(text or ""))
+    sentence = str(statement or "").strip() or parsed_sentence
     if not sentence:
         return None
     return {
         "statement": sentence,
-        "day": str(day or "").strip(),
+        "day": str(day or parsed_day or "").strip(),
         "location": str(location or "").strip(),
+        "span": span,
     }
 
 
-def _split_line(line: str) -> tuple[str, str]:
+_DAY_PREFIX = re.compile(r"^(\d{4}-\d{2}-\d{2})\s+")
+_SPAN_PREFIX = re.compile(r"^(\d+:\d{2}–\d+:\d{2})\s+")
+
+
+def _split_line(line: str) -> tuple[str, str, str]:
     text = line.strip()
-    if "  " not in text:
-        return "", text
-    day, sentence = text.split("  ", 1)
-    return day.strip(), sentence.strip()
+    day = ""
+    span = ""
+    day_match = _DAY_PREFIX.match(text)
+    if day_match:
+        day = day_match.group(1)
+        text = text[day_match.end():].strip()
+    span_match = _SPAN_PREFIX.match(text)
+    if span_match:
+        span = span_match.group(1)
+        text = text[span_match.end():].strip()
+    return day, span, text

@@ -557,11 +557,13 @@ class KeyMomentsTests(unittest.TestCase):
                     "statement": "You put your keys down in the hallway.",
                     "day": "2026-10-17",
                     "location": "hallway",
+                    "span": "",
                 },
                 {
                     "statement": "Sarah visited and mentioned the dentist.",
                     "day": "",
                     "location": "",
+                    "span": "",
                 },
             ],
         )
@@ -581,6 +583,19 @@ class KeyMomentsTests(unittest.TestCase):
             moments = load_key_moments("2026-10-17", Path(folder))
         self.assertEqual(moments[0]["statement"], "You made a cup of tea and switched off the kettle.")
         self.assertEqual(moments[0]["day"], "2026-10-17")
+
+    def test_text_line_uses_the_clip_span_and_the_folder_day(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            day = Path(folder) / "2026-10-17"
+            day.mkdir()
+            (day / "key_moments.txt").write_text(
+                "0:10–0:20  You put your phone down.\n",
+                encoding="utf-8",
+            )
+            moments = load_key_moments("2026-10-17", Path(folder))
+        self.assertEqual(moments[0]["statement"], "You put your phone down.")
+        self.assertEqual(moments[0]["day"], "2026-10-17")
+        self.assertEqual(moments[0]["span"], "0:10–0:20")
 
 
 if __name__ == "__main__":

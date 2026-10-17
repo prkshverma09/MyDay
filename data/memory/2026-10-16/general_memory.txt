@@ -1,0 +1,16 @@
+0:00–0:05  You walked toward the counter in the kitchen.
+0:05–0:10  You lifted the electric kettle by its handle in the kitchen.
+0:10–0:15  You carry the kettle to the sink and set it under the tap in the kitchen.
+0:15–0:20  You filled the kettle with water at the sink in the kitchen.
+0:20–0:25  You set the filled kettle on its base on the counter in the kitchen.
+0:25–0:30  You lean on the counter with both hands, waiting in the kitchen.
+0:30–0:35  You opened a wall cupboard and took out a white mug in the kitchen.
+0:30–0:35  You set the mug on the counter beside the kettle in the kitchen.
+0:35–0:40  You dropped a tea bag into the mug in the kitchen.
+0:40–0:45  You picked the kettle up by its handle in the kitchen.
+0:45–0:50  You pour hot water from the kettle into the mug in the kitchen.
+0:50–0:55  You stir the mug with a spoon in the kitchen.
+0:50–0:55  You open the refrigerator and take out a bottle of milk in the kitchen.
+0:55–1:00  You pour milk from the bottle into the mug in the kitchen.
+0:55–1:00  You pick the mug up with both hands and turn toward the door in the kitchen.
+0:45–0:50  You reached for the mug on the side table and takes a sip of tea in the living room.
