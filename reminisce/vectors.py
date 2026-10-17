@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from reminisce.settings import MIN_COSINE, TAG_BONUS
 from reminisce.store import Clip
 
-CLIP_ID_RE = re.compile(r"clip_\d+")
+CLIP_ID_RE = re.compile(r"clip_\d+(?:_\d+)*")
 
 
 @dataclass

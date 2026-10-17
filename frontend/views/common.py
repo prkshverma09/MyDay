@@ -9,10 +9,11 @@ from pathlib import Path
 
 import streamlit as st
 
+from frontend.views.progress import type_out
 from reminisce.agent import answer_question
 from reminisce.media import MediaError, extract_frame
 from reminisce.models import ChatModel, ModelError, embed_text, load_llm_status
-from reminisce.settings import CLIPS_DIR, ROOT, load_settings
+from reminisce.settings import CLIPS_DIR, EVAL_PATH, ROOT, load_settings
 from reminisce.store import Clip, day_part, human_when, load_clips, load_prefs, set_shared
 from reminisce.tracing import safe_error, trace_from_answer
 from reminisce import vast_index
@@ -44,11 +45,12 @@ def _clear_open() -> None:
 def _nav() -> str:
     if "nav" not in st.session_state:
         st.session_state["nav"] = "My day"
-    with st.container(key="quiet-eval"):
-        if st.button("Eval", key="nav-eval", type="tertiary", icon=":material/bar_chart:"):
-            st.session_state["nav"] = "Eval"
-            _clear_open()
-            st.rerun()
+    if EVAL_PATH.exists():
+        with st.container(key="quiet-eval"):
+            if st.button("Eval", key="nav-eval", type="tertiary", icon=":material/bar_chart:"):
+                st.session_state["nav"] = "Eval"
+                _clear_open()
+                st.rerun()
     st.title("My Day")
     st.markdown('<p class="tagline">Make every day count.</p>', unsafe_allow_html=True)
     columns = st.columns(len(NAV))
@@ -225,13 +227,16 @@ def _ask(question: str, prefs: dict, *, role: str) -> None:
     _show_answer(answer, prefs, role=role)
 
 
-def _show_answer(answer, prefs: dict, *, role: str) -> None:
+def _show_answer(answer, prefs: dict, *, role: str, stream: bool = False) -> None:
     if not answer.grounded:
         st.error("This answer was withheld because it was not tied to a real clip.")
         return
     if answer.citations:
         st.markdown(f'<p class="llm-line">{html.escape(_where_from(answer))}</p>', unsafe_allow_html=True)
-    st.markdown(f'<p class="answer-line">{html.escape(answer.text)}</p>', unsafe_allow_html=True)
+    if stream:
+        type_out(st.empty(), answer.text)
+    else:
+        st.markdown(f'<p class="answer-line">{html.escape(answer.text)}</p>', unsafe_allow_html=True)
     for clip in answer.clips:
         safe_id = "".join(ch if ch.isalnum() else "-" for ch in clip.clip_id)[:60]
         with st.container(border=True, key=f"shown-{role}-{safe_id}"):

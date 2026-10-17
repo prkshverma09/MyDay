@@ -17,8 +17,8 @@ from reminisce.agent import (
     is_grounded,
     story,
 )
-from reminisce.store import Clip, set_shared, upsert_clip
-from reminisce.vectors import rank_clips, tag_match
+from reminisce.store import Clip, next_clip_id, set_shared, upsert_clip
+from reminisce.vectors import extract_clip_ids, rank_clips, tag_match
 from reminisce.vss_search import (
     SearchFilters,
     VssHit,
@@ -419,6 +419,39 @@ class ReminisceTests(unittest.TestCase):
         self.assertEqual(answer.citations, [])
         self.assertEqual(answer.retrieval_path, "journal")
 
+    def test_progress_reports_each_step_in_order(self) -> None:
+        lunch = _clip("clip_001", "Soup at the kitchen table", ["lunch"], [1.0, 0.0])
+        events: list[tuple[str, dict]] = []
+        answer = answer_question(
+            "did I have lunch today?",
+            [lunch],
+            [1.0, 0.0],
+            role="owner",
+            owner_id="user_123",
+            carer_id="carer_daughter",
+            llm=ScriptedModel("clip_001"),
+            progress=lambda event, **info: events.append((event, info)),
+        )
+        self.assertEqual([name for name, _ in events], ["ranking", "ranked", "choosing", "chosen", "checking", "checked"])
+        self.assertEqual(events[1][1]["count"], 1)
+        self.assertTrue(events[3][1]["by_model"])
+        self.assertEqual(events[-1][1], {"grounded": True, "count": 1})
+        self.assertTrue(answer.grounded)
+
+    def test_progress_stops_after_ranking_when_nothing_matches(self) -> None:
+        events: list[str] = []
+        answer = answer_question(
+            "did I fly a plane?",
+            [],
+            [],
+            role="owner",
+            owner_id="user_123",
+            carer_id="carer_daughter",
+            progress=lambda event, **info: events.append(event),
+        )
+        self.assertEqual(events, ["ranking", "ranked"])
+        self.assertEqual(answer.text, ABSTAIN)
+
     def test_query_lifts_out_time_and_place(self) -> None:
         options = {"location": ["new_york", "san_francisco", "toronto"]}
         words, filters = parse_query("a person walking a dog in New York this week", options)
@@ -485,6 +518,13 @@ class ReminisceTests(unittest.TestCase):
     def test_journal_search_ignores_a_clip_that_is_close_to_every_query(self) -> None:
         visit = _clip("clip_002", "My daughter visits with flowers", ["visit", "daughter"], [1.0, 0.0])
         self.assertEqual(find_clips("a forklift", [visit], [1.0, 0.0], owner_id="user_123"), [])
+
+    def test_new_clips_are_named_by_date_and_time(self) -> None:
+        when = datetime(2026, 10, 17, 14, 46, 12)
+        self.assertEqual(next_clip_id([], when), "clip_20261017_144612")
+        taken = [_clip("clip_20261017_144612", "Lunch.", ["lunch"], [1.0, 0.0])]
+        self.assertEqual(next_clip_id(taken, when), "clip_20261017_144612_2")
+        self.assertEqual(extract_clip_ids("Source: clip_20261017_144612."), ["clip_20261017_144612"])
 
 
 if __name__ == "__main__":

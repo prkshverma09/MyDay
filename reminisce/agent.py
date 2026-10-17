@@ -211,6 +211,7 @@ def answer_question(
     llm: ChatModel | None = None,
     searcher=None,
     fetch=None,
+    progress=None,
 ) -> Answer:
     """Answer from the journal, using the video archive only when it adds something real.
 
@@ -218,7 +219,16 @@ def answer_question(
     archive-only hit at or above ARCHIVE_MIN_SIMILARITY. Only the owner searches the
     archive. A carer searches clips that were sent to them. `searcher` is omitted by
     the eval and the unit tests that rank the journal directly.
+
+    `progress(event, **info)` is called as each step starts and ends, so a UI can
+    show the work as it happens. Events: ranking, ranked, using_archive, choosing,
+    chosen, fetching, fetched, checking, checked.
     """
+
+    def emit(event: str, **info) -> None:
+        if progress is not None:
+            progress(event, **info)
+
     visible = clips_for_viewer(clips, role=role, owner_id=owner_id, carer_id=carer_id)
     corpus_ids = {clip.clip_id for clip in visible}
     tools: list[str] = []
@@ -251,15 +261,19 @@ def answer_question(
                 found.append(Hit(clip=clip, cosine=score, tag_match=False, combined=score))
         return found[:MAX_VSS_HITS]
 
+    emit("ranking", clips=len(visible))
     if matched:
         retrieval_path = "vss"
         ranked = hits = _vss_ranked(include_outside=False)
+        emit("ranked", count=len(hits))
     else:
         tools.append("search_day")
         ranked, hits = _journal_hits(question, visible, query_vector)
+        emit("ranked", count=len(hits))
         if not hits and outside:
             retrieval_path = "vss"
             ranked = hits = _vss_ranked(include_outside=True)
+            emit("using_archive", count=len(hits))
 
     system = PROMPTS.get(prompt_version, PROMPTS["warm"])
     raw = ""
@@ -287,6 +301,7 @@ def answer_question(
     candidate_ids = [hit.clip.clip_id for hit in hits]
     by_id = {hit.clip.clip_id: hit.clip for hit in hits}
     aliases = [f"hit_{index + 1}" for index in range(len(hits))] if retrieval_path == "vss" else None
+    emit("choosing", count=len(hits), model=getattr(llm, "model", "") if llm is not None else "")
     if llm is not None:
         tools.append("select_clips")
         try:
@@ -313,6 +328,7 @@ def answer_question(
         chosen = [hits[0].clip]
         if selection == "abstain":
             selection = "fallback_top1"
+    emit("chosen", count=len(chosen), by_model=selection == "model")
 
     confirmed: list[Clip] = []
     for clip in chosen:
@@ -323,14 +339,19 @@ def answer_question(
             loaded = by_id.get(clip.clip_id)
             if loaded is not None and not loaded.media_relpath:
                 tools.append("fetch_segment")
+                emit("fetching")
                 attach_media(loaded, sources.get(loaded.clip_id, ""), fetch)
+                emit("fetched", ok=bool(loaded.media_relpath))
         else:
             loaded = None
         if loaded is not None:
             confirmed.append(loaded)
 
+    emit("checking")
     text = render_clips(confirmed) if confirmed else ABSTAIN
     citations = [clip.clip_id for clip in confirmed]
+    grounded = is_grounded(text, confirmed, corpus_ids)
+    emit("checked", grounded=grounded, count=len(confirmed))
     return Answer(
         text=text,
         citations=citations,
@@ -340,7 +361,7 @@ def answer_question(
         model=model_name,
         prompt_version=prompt_version,
         selection=selection,
-        grounded=is_grounded(text, confirmed, corpus_ids),
+        grounded=grounded,
         tools=tools,
         retrieval_path=retrieval_path,
         retrieval_note=retrieval_note,

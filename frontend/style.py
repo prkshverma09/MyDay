@@ -258,6 +258,24 @@ button[data-testid^="stBaseButton-"]:disabled {
   width: 100% !important;
   font-size: 22px !important;
 }
+[data-testid="stExpander"] details {
+  background: rgba(253, 248, 245, 0.72) !important;
+  border: 1px solid rgba(255, 255, 255, 0.85) !important;
+  border-radius: 20px !important;
+}
+[data-testid="stExpander"] summary p {
+  color: #44341D !important;
+  font-size: 20px !important;
+  font-weight: 600 !important;
+}
+[data-testid="stExpander"] [data-testid="stMarkdownContainer"] p {
+  font-size: 20px !important;
+  line-height: 1.45 !important;
+  margin: 0.1rem 0 !important;
+}
+[data-testid="stExpander"] [data-testid="stIconMaterial"] {
+  color: #52735E !important;
+}
 [data-testid="stMetricValue"],
 [data-testid="stMetricLabel"] {
   color: #44341D !important;
