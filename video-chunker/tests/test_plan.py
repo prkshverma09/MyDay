@@ -36,7 +36,14 @@ def test_rejects_non_positive_duration():
     with pytest.raises(ValueError, match="duration_s"):
         plan_segments(0, 15)
 
-def test_tolerance_is_two_frames_with_a_floor():
-    assert duration_tolerance_s(25) == pytest.approx(0.08)
+def test_tolerance_is_four_frames_with_a_floor():
+    assert duration_tolerance_s(25) == pytest.approx(0.16)
     assert duration_tolerance_s(120) == pytest.approx(0.04)
     assert duration_tolerance_s(0) == pytest.approx(0.08)
+
+
+def test_ntsc_tolerance_covers_a_few_frames_but_not_a_second():
+    # 29.97 fps (30000/1001). A real ffmpeg cut was 0.071s long; ~1s must still fail.
+    tolerance = duration_tolerance_s(30000 / 1001)
+    assert tolerance > 0.071
+    assert tolerance < 0.5

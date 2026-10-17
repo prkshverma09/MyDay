@@ -38,4 +38,4 @@ def plan_segments(
 def duration_tolerance_s(frame_rate: float) -> float:
     if frame_rate <= 0:
         return 0.08
-    return max(2.0 / frame_rate, 0.04)
+    return max(4.0 / frame_rate, 0.04)
