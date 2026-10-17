@@ -107,6 +107,10 @@ Meet Margaret. Her morning was recorded — now she asks it questions.
 
 Hackathon build — work in progress (demos 16:30, 17 Oct 2026).
 
+## Perception payload
+
+`pipeline/video_to_text.py` splits a video into 5-second windows and runs Cosmos Reason and YOLO11 in parallel. It writes JSONL whose `llm_input` field is the text a later memory LLM should read. This repo does not call that LLM. `library/example-descriptions/annotations.jsonl` is a 100-window sample of that contract, taken from footage already in the index.
+
 ## Getting started
 
 ```bash
