@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "video-chunker"
+version = "0.1.0"
+description = "Cut a local video file into timed MP4 chunks."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+video-chunker = "video_chunker.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
