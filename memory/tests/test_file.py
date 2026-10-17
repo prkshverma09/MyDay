@@ -303,6 +303,52 @@ def test_reading_run_collapses_across_segment_files():
     assert filed["key"][0]["time_frame"]["end_sec"] == 15
 
 
+def test_tea_and_kettle_off_is_one_memory():
+    records = [
+        _clip("walk", 0, 5, "She walks into the kitchen.", "kitchen"),
+        _clip("fill", 5, 10, "Her hands fill a kettle at the sink.", "kitchen"),
+        _clip("off", 10, 15, "The kettle clicks off.", "kitchen"),
+        _clip("pour", 15, 20, "She pours hot water from the kettle into the mug.", "kitchen"),
+    ]
+    filed = file_records(records)
+    assert [entry["statement"] for entry in filed["key"]] == [
+        "You made a cup of tea and switched off the kettle.",
+    ]
+    assert filed["key"][0]["time_frame"]["start_sec"] == 0
+    assert filed["key"][0]["time_frame"]["end_sec"] == 20
+    assert any(entry["statement"] == "You walked into the kitchen." for entry in filed["general"])
+
+
+def test_the_same_action_in_a_row_is_one_span():
+    records = [
+        _clip("tea-1", 20, 25, "She makes a cup of tea.", "home_kitchen"),
+        _clip("tea-2", 25, 30, "She makes a cup of tea.", "home_kitchen"),
+    ]
+    filed = file_records(records)
+    assert len(filed["general"]) == 1
+    entry = filed["general"][0]
+    assert entry["statement"] == "You made a cup of tea in the home_kitchen."
+    assert entry["time_frame"]["start_sec"] == 20
+    assert entry["time_frame"]["end_sec"] == 30
+
+
+def test_reading_with_a_sip_in_the_middle_is_one_memory():
+    records = [
+        _clip("arrive", 0, 5, "She walks into the living room.", "living room"),
+        _clip("read-1", 5, 10, "She sits reading, the open book in her hands.", "living room"),
+        _clip("sip", 10, 15, "She takes a sip of tea and returns to the book.", "living room"),
+        _clip("read-2", 15, 20, "She turns a page and keeps reading the book.", "living room"),
+    ]
+    filed = file_records(records)
+    assert filed["general"] == []
+    assert len(filed["key"]) == 1
+    entry = filed["key"][0]
+    assert entry["statement"] == "You read a book."
+    assert entry["key_reason"] == "reading"
+    assert entry["time_frame"]["start_sec"] == 0
+    assert entry["time_frame"]["end_sec"] == 20
+
+
 def test_model_failure_uses_the_text(tmp_path):
     filed = file_records(load_records(HOME), llm=_Scripted(RuntimeError("down")))
     assert filed["key"][0]["statement"].startswith("You put your keys")

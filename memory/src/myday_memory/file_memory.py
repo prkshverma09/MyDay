@@ -116,6 +116,7 @@ def file_records(records: list[dict], llm=None) -> dict[str, list[dict]]:
             entry["_sentences"] = parsed.sentences
         ordered.append(entry)
     ordered = _collapse_reading(ordered)
+    ordered = _collapse_episodes(ordered)
     general = [entry for entry in ordered if entry["store"] != "key"]
     key = [entry for entry in ordered if entry["store"] == "key"]
     return {
@@ -204,10 +205,7 @@ def _same_reading_scene(group: list[dict], entry: dict) -> bool:
 
 def _merge_reading(group: list[dict]) -> dict:
     first = group[0]
-    last = group[-1]
-    frame = dict(first["time_frame"])
-    frame["start_sec"] = first["time_frame"]["start_sec"]
-    frame["end_sec"] = last["time_frame"]["end_sec"]
+    frame = _span_frame(group)
     sentences: list[str] = []
     for entry in group:
         sentences.extend(entry.get("_sentences") or [])
@@ -248,6 +246,200 @@ def _page_turn_only(sentences: list[str]) -> bool:
     if re.search(r"\b(pick|picks|picked|open|opens)\b.{0,40}\bbook\b", blob, re.IGNORECASE):
         return False
     return _book_name(sentences) is None
+
+
+def _collapse_episodes(entries: list[dict]) -> list[dict]:
+    """One tea-making run, including switching the kettle off, is one memory.
+
+    One reading run, including sitting down and a sip, is one memory.
+    """
+
+    collapsed: list[dict] = []
+    for place in _place_groups(entries):
+        labels = _absorb_settling([_episode_kind(entry) for entry in place])
+        start = 0
+        for index in range(1, len(place) + 1):
+            if index < len(place) and labels[index] == labels[start]:
+                continue
+            chunk = place[start:index]
+            kind = labels[start]
+            if len(chunk) > 1 and kind == "tea":
+                collapsed.extend(_tea_steps(chunk))
+            elif len(chunk) > 1 and kind == "reading":
+                collapsed.append(_merge_episode_reading(chunk))
+            else:
+                collapsed.extend(chunk)
+            start = index
+    return _collapse_same_statement(collapsed)
+
+
+def _collapse_same_statement(entries: list[dict]) -> list[dict]:
+    """Consecutive windows with the same sentence are one span."""
+
+    collapsed: list[dict] = []
+    for entry in entries:
+        if collapsed and _same_action(collapsed[-1], entry):
+            previous = collapsed[-1]
+            merged = _merge_span([previous, entry], str(previous.get("statement") or ""))
+            merged["store"] = previous.get("store") or "general"
+            merged["key_reason"] = previous.get("key_reason")
+            merged["importance"] = previous.get("importance")
+            collapsed[-1] = merged
+            continue
+        collapsed.append(entry)
+    return collapsed
+
+
+def _same_action(previous: dict, entry: dict) -> bool:
+    if str(previous.get("statement") or "") != str(entry.get("statement") or ""):
+        return False
+    if previous.get("location") != entry.get("location"):
+        return False
+    if previous.get("store") != entry.get("store"):
+        return False
+    previous_end = float((previous.get("time_frame") or previous.get("window") or {}).get("end_sec") or 0)
+    start = float((entry.get("time_frame") or entry.get("window") or {}).get("start_sec") or 0)
+    return -0.05 <= start - previous_end <= 1.0
+
+
+def _tea_steps(group: list[dict]) -> list[dict]:
+    switched_off = any(_kettle_switched(entry, "off") for entry in group)
+    switched_on = any(_kettle_switched(entry, "on") for entry in group)
+    steps = [entry for entry in group if not _kettle_switched(entry, "off") and not _kettle_switched(entry, "on")]
+    if not switched_off and not switched_on:
+        return steps
+    statement = (
+        "You made a cup of tea and switched off the kettle."
+        if switched_off
+        else "You made a cup of tea and switched on the kettle."
+    )
+    summary = _merge_span(group, statement)
+    summary["store"] = "key"
+    summary["key_reason"] = "appliance on or off"
+    summary["importance"] = IMPORTANCE["appliance on or off"]
+    return [*steps, summary]
+
+
+def _place_groups(entries: list[dict]) -> list[list[dict]]:
+    groups: list[list[dict]] = []
+    for entry in entries:
+        if groups and _same_reading_scene(groups[-1], entry):
+            groups[-1].append(entry)
+            continue
+        groups.append([entry])
+    return groups
+
+
+def _episode_kind(entry: dict) -> str:
+    text = str(entry.get("statement") or "")
+    if entry.get("key_reason") == "reading" or re.search(r"\b(read|reading|book)\b", text, re.IGNORECASE):
+        return "reading"
+    if re.search(r"\b(kettle|poured|pouring|milk)\b", text, re.IGNORECASE) or re.search(
+        r"\bmade a cup of tea\b", text, re.IGNORECASE
+    ):
+        return "tea"
+    if entry.get("key_reason") == "appliance on or off" and re.search(r"\bkettle\b", text, re.IGNORECASE):
+        return "tea"
+    if re.search(r"\b(walked|walks|sat|sits|sitting|sofa|couch|enters|enter)\b", text, re.IGNORECASE):
+        return "settle"
+    return "other"
+
+
+def _absorb_settling(labels: list[str]) -> list[str]:
+    absorbed = list(labels)
+    for index, label in enumerate(absorbed):
+        if label != "settle":
+            continue
+        previous = next((absorbed[cursor] for cursor in range(index - 1, -1, -1) if absorbed[cursor] != "settle"), None)
+        following = next((absorbed[cursor] for cursor in range(index + 1, len(absorbed)) if absorbed[cursor] != "settle"), None)
+        if previous in {"tea", "reading"} and following in {None, previous}:
+            absorbed[index] = previous
+        elif following in {"tea", "reading"} and previous in {None, following}:
+            absorbed[index] = following
+    return absorbed
+
+
+def _merge_tea(group: list[dict]) -> dict:
+    switched_off = any(_kettle_switched(entry, "off") for entry in group)
+    switched_on = any(_kettle_switched(entry, "on") for entry in group)
+    if switched_off:
+        statement = "You made a cup of tea and switched off the kettle."
+    elif switched_on:
+        statement = "You made a cup of tea and switched on the kettle."
+    else:
+        statement = "You made a cup of tea."
+    merged = _merge_span(group, statement)
+    if switched_off or switched_on:
+        merged["store"] = "key"
+        merged["key_reason"] = "appliance on or off"
+        merged["importance"] = IMPORTANCE["appliance on or off"]
+    return merged
+
+
+def _kettle_switched(entry: dict, state: str) -> bool:
+    text = str(entry.get("statement") or "")
+    if entry.get("key_reason") != "appliance on or off" and not re.search(r"\bkettle\b", text, re.IGNORECASE):
+        return False
+    if state == "off":
+        return re.search(r"\b(off|switched off|turned off|clicks off)\b", text, re.IGNORECASE) is not None
+    return re.search(r"\b(turned|switched|clicks|is|was)\s+on\b", text, re.IGNORECASE) is not None
+
+
+def _merge_episode_reading(group: list[dict]) -> dict:
+    name = None
+    for entry in group:
+        found = _book_name([str(entry.get("statement") or "")])
+        if found:
+            name = found
+            break
+    statement = f"You read {name}." if name else "You read a book."
+    merged = _merge_span(group, statement)
+    merged["store"] = "key"
+    merged["key_reason"] = "reading"
+    merged["importance"] = IMPORTANCE["reading"]
+    return merged
+
+
+def _merge_span(group: list[dict], statement: str) -> dict:
+    first = group[0]
+    frame = _span_frame(group)
+    return {
+        "id": first.get("id") or "",
+        "camera_id": first.get("camera_id") or "",
+        "location": first.get("location") or "",
+        "window": {"start_sec": frame["start_sec"], "end_sec": frame["end_sec"]},
+        "time_frame": frame,
+        "store": first.get("store") or "general",
+        "key_reason": first.get("key_reason"),
+        "statement": statement,
+        "actors": [],
+        "objects": _union_objects(group),
+        "appointment": None,
+        "importance": first.get("importance") or 0.4,
+    }
+
+
+def _span_frame(group: list[dict]) -> dict:
+    first = group[0].get("time_frame") or group[0].get("window") or {}
+    last = group[-1].get("time_frame") or group[-1].get("window") or {}
+    frame = dict(first)
+    frame["start_sec"] = first.get("start_sec", 0)
+    frame["end_sec"] = last.get("end_sec", frame["start_sec"])
+    sources: list[str] = []
+    for entry in group:
+        moment = entry.get("time_frame") or {}
+        source = moment.get("source")
+        if source and source not in sources:
+            sources.append(source)
+        for extra in moment.get("sources") or []:
+            if extra not in sources:
+                sources.append(extra)
+    if len(sources) > 1:
+        frame["sources"] = sources
+        frame["source"] = sources[0]
+    elif len(sources) == 1:
+        frame["source"] = sources[0]
+    return frame
 
 
 def _drop_private(entry: dict) -> None:
@@ -618,8 +810,9 @@ def _statement(
         return _first_sentence(sentences)
     if any(re.search(r"\b(cat|biscuit)\b", sentence, re.IGNORECASE) for sentence in sentences):
         return "You fed the cat."
-    if any(re.search(r"\b(tea|kettle|mug)\b", sentence, re.IGNORECASE) for sentence in sentences):
-        return f"You made a cup of tea{place}."
+    if any(re.search(r"\b(tea|kettle)\b", sentence, re.IGNORECASE) for sentence in sentences):
+        if not any(re.search(r"\bbook\b", sentence, re.IGNORECASE) for sentence in sentences):
+            return f"You made a cup of tea{place}."
     if _MOVE.search(" ".join(sentences)):
         return f"You walked into the {location}." if location else "You walked into another room."
     if sentences:
@@ -708,6 +901,8 @@ def _video(entry: dict) -> dict:
     }
     if frame.get("source"):
         video["source"] = frame["source"]
+    if frame.get("sources"):
+        video["sources"] = list(frame["sources"])
     if frame.get("chunk") is not None:
         video["chunk"] = frame["chunk"]
     return video
