@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+.env
+wandb/
+weave/
+data/journal/
+data/clips/*.mp4
+data/clips/*.jpg
+data/clips/frames/
+data/clips/uploads/
+data/clips/manifest.json
+data/questions.json
