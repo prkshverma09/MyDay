@@ -198,7 +198,7 @@ class ChatModel:
         self.model = self.settings.llm_model
         self.backend = "wandb" if self.settings.wandb_ready else "template"
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, *, max_tokens: int = 80) -> str:
         if not self.settings.wandb_ready:
             raise ModelError("W&B API key is not set")
         headers = {
@@ -213,7 +213,7 @@ class ChatModel:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "max_tokens": 80,
+            "max_tokens": max_tokens,
             "temperature": 0,
         }
         body = _post_json("https://api.inference.wandb.ai/v1/chat/completions", payload, headers, timeout=60)

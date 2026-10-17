@@ -13,7 +13,6 @@ import streamlit as st
 
 from frontend.style import CSS
 from frontend.views.ask import _page_ask
-from frontend.views.clip import _page_clip
 from frontend.views.common import _flash, _nav, _prefs
 from frontend.views.day import _page_day
 from frontend.views.eval import _page_eval
@@ -30,12 +29,6 @@ def main() -> None:
         _page_ask(prefs)
     elif page == "Story":
         _page_story(prefs)
-    elif page == "Clip":
-        st.markdown(
-            "<style>.block-container{max-width:1180px !important;}</style>",
-            unsafe_allow_html=True,
-        )
-        _page_clip(prefs)
     elif page == "Eval":
         _page_eval()
     else:

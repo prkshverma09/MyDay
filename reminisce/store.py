@@ -24,6 +24,7 @@ class Clip:
     source_citation: str = ""
     media_relpath: str = ""
     description_source: str = "cosmos"
+    start_sec: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.source_citation:
@@ -53,6 +54,7 @@ def clip_from_dict(row: dict) -> Clip:
         source_citation=row.get("source_citation") or row["clip_id"],
         media_relpath=row.get("media_relpath") or "",
         description_source=row.get("description_source") or "cosmos",
+        start_sec=float(row.get("start_sec") or 0),
     )
 
 

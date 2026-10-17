@@ -21,7 +21,6 @@ from reminisce import vast_index
 PREVIEW = 4
 
 NAV = (
-    ("Clip", "nav-clip", ":material/play_circle:"),
     ("My day", "nav-day", ":material/home:"),
     ("Ask", "nav-ask", ":material/chat_bubble:"),
     ("Story", "nav-story", ":material/auto_stories:"),
@@ -134,7 +133,7 @@ def _frame_path(clip: Clip) -> Path | None:
     if media is None:
         return None
     try:
-        extract_frame(media, frame)
+        extract_frame(media, frame, at=clip.start_sec + min(1.0, clip.duration_s / 2 if clip.duration_s else 1.0))
     except MediaError:
         return None
     return frame if frame.is_file() else None

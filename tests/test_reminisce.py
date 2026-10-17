@@ -14,11 +14,13 @@ from reminisce.agent import (
     clips_for_viewer,
     clips_since,
     daily_digest,
+    day_story,
     find_clips,
     is_grounded,
     story,
 )
 from reminisce.day_memory import load_key_moments
+from reminisce.models import ModelError
 from reminisce.store import Clip, next_clip_id, set_shared, upsert_clip
 from reminisce.vectors import extract_clip_ids, rank_clips, tag_match
 from reminisce.vss_search import (
@@ -37,8 +39,15 @@ class ScriptedModel:
         self.model = "scripted"
         self.text = text
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, **_options) -> str:
         return self.text
+
+
+class FailingModel:
+    model = "failing"
+
+    def complete(self, system: str, user: str, **_options) -> str:
+        raise ModelError("down")
 
 
 def _clip(clip_id: str, description: str, tags: list[str], vector: list[float], shared: list[str] | None = None) -> Clip:
@@ -520,6 +529,42 @@ class ReminisceTests(unittest.TestCase):
     def test_journal_search_ignores_a_clip_that_is_close_to_every_query(self) -> None:
         visit = _clip("clip_002", "My daughter visits with flowers", ["visit", "daughter"], [1.0, 0.0])
         self.assertEqual(find_clips("a forklift", [visit], [1.0, 0.0], owner_id="user_123"), [])
+
+    def test_day_story_keeps_only_lines_tied_to_that_days_clips(self) -> None:
+        from datetime import date
+
+        lunch = _clip("clip_a", "A bowl of soup on a kitchen table. Steam rises.", ["lunch"], [1.0, 0.0])
+        walk = _clip("clip_b", "A path through a park with trees.", ["walk"], [0.0, 1.0])
+        walk.recorded_at = "2026-10-17T15:10:00+01:00"
+        other_day = _clip("clip_c", "A garden.", [], [0.0, 1.0])
+        other_day.recorded_at = "2026-10-16T09:00:00+01:00"
+        model = ScriptedModel("1 | You had soup at the kitchen table.\n5 | You met the Queen.")
+        story = day_story([walk, other_day, lunch], date(2026, 10, 17), owner_id="user_123", llm=model)
+        self.assertEqual([clip.clip_id for _, _, clip in story.moments], ["clip_a", "clip_b"])
+        self.assertEqual(story.moments[0][:2], ("12:30", "You had soup at the kitchen table."))
+        self.assertEqual(story.moments[1][:2], ("15:10", "A path through a park with trees."))
+        self.assertEqual(day_story([lunch], date(2026, 10, 15), owner_id="user_123").moments, [])
+
+    def test_day_story_falls_back_to_descriptions_when_the_model_fails(self) -> None:
+        from datetime import date
+
+        lunch = _clip("clip_a", "A bowl of soup on a kitchen table. Steam rises.", ["lunch"], [1.0, 0.0])
+        story = day_story([lunch], date(2026, 10, 17), owner_id="user_123", llm=FailingModel())
+        self.assertEqual(story.moments[0][1], "A bowl of soup on a kitchen table.")
+        self.assertEqual(story.model, "template")
+
+    def test_demo_video_is_split_into_moments_with_their_own_start(self) -> None:
+        from reminisce.demo import DEMO_ANNOTATIONS, demo_clips, key_sentence
+
+        if not DEMO_ANNOTATIONS.is_file():
+            self.skipTest("demo_data is not checked out")
+        moments = demo_clips(embed=False)
+        self.assertGreaterEqual(len(moments), 2)
+        self.assertEqual([clip.start_sec for clip in moments], sorted(clip.start_sec for clip in moments))
+        phone = next(clip for clip in moments if "smartphone" in clip.cosmos_description)
+        sentence = key_sentence(phone, "Where did I put my phone?")
+        self.assertIn(sentence, phone.cosmos_description)
+        self.assertIn("place", sentence.lower())
 
     def test_new_clips_are_named_by_date_and_time(self) -> None:
         when = datetime(2026, 10, 17, 14, 46, 12)

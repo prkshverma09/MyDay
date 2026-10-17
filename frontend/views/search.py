@@ -1,90 +1,46 @@
-"""Search results in an Ask reply, as small picture rows: more saved clips, then the camera archive."""
+"""Results in an Ask reply: small picture rows of moments, or a 2×2 grid when nothing answers."""
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import html
+from pathlib import Path
 
 import streamlit as st
 
 from frontend.views.common import _first_upper, _frame_path, _media, _send_button
 from reminisce.agent import clips_since, find_clips
+from reminisce.demo import is_demo, span_label
 from reminisce.store import Clip, human_when
-from reminisce.vss_search import (
-    SearchFilters,
-    SearchResult,
-    VssMoment,
-    VssSearchError,
-    fetch_segment,
-    metadata_options,
-    parse_query,
-    search,
-)
+from reminisce.vss_search import SearchFilters, parse_query
 
-WHEN = {
-    "Any time": "all",
-    "Last hour": "1h",
-    "Last 24 hours": "24h",
-    "Last 7 days": "7d",
-    "Last 30 days": "30d",
+WHEN_LABEL = {
+    "1h": "Last hour",
+    "24h": "Last 24 hours",
+    "7d": "Last 7 days",
+    "30d": "Last 30 days",
 }
-WHEN_LABEL = {value: label for label, value in WHEN.items()}
-PAGE = 10
-MAX_RESULTS = 50
-
-
-def _pretty(value: str) -> str:
-    return value.replace("_", " ")
 
 
 def _safe_key(value: str) -> str:
     return hashlib.sha1(value.encode()).hexdigest()[:16]
 
 
-def _clock(seconds: float) -> str:
-    whole = int(max(0.0, seconds))
-    return f"{whole // 60}:{whole % 60:02d}"
-
-
 def build_filters(query: str) -> tuple[str, SearchFilters]:
-    """Words for the archive, plus the time and place phrases lifted from the question."""
-    return parse_query(query, metadata_options())
-
-
-def archive_search(words: str, filters: SearchFilters, *, top_k: int) -> tuple[SearchResult | None, str]:
-    try:
-        return search(words, filters, top_k=top_k), ""
-    except VssSearchError as exc:
-        return None, str(exc)
+    """The question words, plus any time phrase lifted out of them ("this morning", "today")."""
+    return parse_query(query)
 
 
 def journal_matches(words: str, clips: list[Clip], vector: list[float], filters: SearchFilters, owner_id: str):
-    if filters.metadata:
-        return []
     return find_clips(words, clips_since(clips, filters.time_window), vector, owner_id=owner_id)
 
 
-SPOKEN = {
-    "location": "in {}",
-    "camera_id": "from camera {}",
-    "capture_type": "{} footage",
-    "object_classes": "showing a {}",
-}
-
-
 def filter_parts(filters: SearchFilters) -> str:
-    """"the last 24 hours, in New York", or empty when nothing narrows the search."""
-    rest = []
-    for field_name, value in filters.metadata.items():
-        shown = _pretty(value).title() if field_name == "location" else _pretty(value)
-        rest.append(SPOKEN.get(field_name, "{}").format(shown))
-    if filters.time_window != "all":
-        head = "the " + WHEN_LABEL.get(filters.time_window, filters.time_window).lower()
-    elif rest:
-        head = "videos"
-    else:
+    """"the last 24 hours", or empty when the question names no time."""
+    if filters.time_window == "all":
         return ""
-    return " ".join([head, ", ".join(rest)]).strip()
+    return "the " + WHEN_LABEL.get(filters.time_window, filters.time_window).lower()
 
 
 def _short(text: str, limit: int = 150) -> str:
@@ -92,18 +48,12 @@ def _short(text: str, limit: int = 150) -> str:
     return text if len(text) <= limit else text[: limit - 1].rsplit(" ", 1)[0] + "…"
 
 
-def _row(
-    key: str,
-    open_id: str,
-    thumb,
-    *,
-    pill: str,
-    line: str,
-    details: str,
-    source: str,
-    load_video,
-    send=None,
-) -> None:
+def when_label(clip: Clip) -> str:
+    """'0:10–0:20' for a moment inside the demo video, otherwise when the clip was recorded."""
+    return span_label(clip) if is_demo(clip) else _first_upper(human_when(clip.recorded_at))
+
+
+def _row(key: str, open_id: str, thumb, *, pill: str, line: str, source: str, load_video, start: float = 0.0, send=None) -> None:
     """One compact result: a small picture on the left, words and buttons on the right."""
     playing = st.session_state.get("search_open") == open_id
     with st.container(border=True, key=f"shown-row-{key}"):
@@ -119,8 +69,6 @@ def _row(
                 parts.append(f'<span class="row-time">{html.escape(pill)}</span>')
             if line:
                 parts.append(f'<div class="row-line">{html.escape(_short(line))}</div>')
-            if details:
-                parts.append(f'<div class="row-meta">{html.escape(details)}</div>')
             parts.append(f'<div class="row-source" title="{html.escape(source)}">Source: {html.escape(source)}</div>')
             st.markdown(f'<div class="row-words">{"".join(parts)}</div>', unsafe_allow_html=True)
             if send is None:
@@ -132,98 +80,88 @@ def _row(
                 with send_col:
                     send()
         if playing:
-            with st.spinner("Loading video…"):
-                path = load_video()
-            if path is not None:
-                st.video(str(path), autoplay=True)
-            else:
-                st.info("This video could not be loaded.")
+            _play_video(load_video, start)
 
 
-def clip_row(clip: Clip, prefs: dict, *, turn: int, section: str, description: bool = True, send: bool = True) -> None:
+def _play_video(load_video, start: float) -> None:
+    path = load_video()
+    if path is not None:
+        st.video(str(path), start_time=int(start), autoplay=True)
+    else:
+        st.info("This video could not be loaded.")
+
+
+def clip_row(clip: Clip, prefs: dict, *, turn: int, section: str, line: str | None = None) -> None:
     open_id = f"{turn}:{clip.clip_id}"
     key = _safe_key(f"{section}:{open_id}")
     _row(
         key,
         open_id,
         _frame_path(clip),
-        pill=_first_upper(human_when(clip.recorded_at)),
-        line=clip.cosmos_description if description else "",
-        details="",
+        pill=when_label(clip),
+        line=clip.cosmos_description if line is None else line,
         source=clip.source_citation or clip.clip_id,
         load_video=lambda: _media(clip),
-        send=(lambda: _send_button(clip, prefs, key=f"{section}-{key}")) if send else None,
+        start=clip.start_sec,
+        send=None if is_demo(clip) else (lambda: _send_button(clip, prefs, key=f"{section}-{key}")),
     )
 
 
-def _moment_row(moment: VssMoment, thumb, *, turn: int) -> None:
-    open_id = f"{turn}:{moment.citation_id}"
-    key = _safe_key(f"archive:{open_id}")
-    when = _first_upper(human_when(moment.recorded_at))
-    span = f"{_clock(moment.start_sec)}–{_clock(moment.end_sec)}" if moment.end_sec > moment.start_sec else ""
-    details = [part for part in (_first_upper(moment.place), moment.camera) if part]
-    details.append(f"match {moment.similarity:.2f}")
-    if moment.matched_segments > 1:
-        details.append(f"{moment.matched_segments} moments in this video")
-    _row(
-        key,
-        open_id,
-        thumb,
-        pill=" · ".join(part for part in (when, span) if part),
-        line=moment.description,
-        details=" · ".join(details),
-        source=moment.citation_id,
-        load_video=lambda: fetch_segment(moment.source),
+def show_journal(hits, *, skip: set[str], turn: int) -> None:
+    clips = [hit.clip for hit in hits if hit.clip.clip_id not in skip]
+    show_tiles(clips, turn=turn, heading="Other moments", caption=False)
+
+
+def _tile_background(key: str, thumb) -> str:
+    """Per-tile CSS that paints the picture behind that tile's play button."""
+    try:
+        data = base64.b64encode(Path(thumb).read_bytes()).decode() if thumb else ""
+    except OSError:
+        data = ""
+    if not data:
+        return ""
+    return (
+        f'<style>.st-key-tile-play-{key} button {{'
+        f'background-image: url("data:image/jpeg;base64,{data}") !important;}}</style>'
     )
 
 
-def show_journal(hits, filters: SearchFilters, prefs: dict, *, skip: set[str], turn: int) -> None:
-    hits = [hit for hit in hits if hit.clip.clip_id not in skip]
-    if filters.metadata or not hits:
-        return
-    st.markdown('<p class="result-head">More from your clips</p>', unsafe_allow_html=True)
-    for hit in hits:
-        clip_row(hit.clip, prefs, turn=turn, section="journal")
-
-
-def show_archive(
-    result: SearchResult | None,
-    filters: SearchFilters,
+def show_tiles(
+    clips: list[Clip],
     *,
-    skip: set[str],
-    top_k: int,
-    latency: float,
-    thumbs: dict[str, str],
     turn: int,
-    allow_more: bool,
-) -> bool:
-    """Draw the archive results. Returns True when the person asked for more."""
-    st.markdown('<p class="result-head">Camera archive</p>', unsafe_allow_html=True)
-    if result is None:
-        st.markdown('<p class="quiet-note">The camera archive cannot be searched right now.</p>', unsafe_allow_html=True)
-        return False
-    moments = [moment for moment in result.moments if moment.citation_id not in skip]
-    if not moments:
-        tail = " for that time or place" if filters.active() else ""
-        st.markdown(f'<p class="quiet-note">Nothing else in the archive matches{tail}.</p>', unsafe_allow_html=True)
-        return False
-    for moment in moments:
-        _moment_row(moment, thumbs.get(moment.source), turn=turn)
-    st.markdown(
-        f'<p class="quiet-note">{len(moments)} videos from {result.total} matching moments, in {latency:.1f} s.</p>',
-        unsafe_allow_html=True,
-    )
-    more = False
-    if allow_more and result.total >= top_k and top_k < MAX_RESULTS:
-        more = st.button("Show more", key=f"search-more-{turn}", icon=":material/expand_more:", width="stretch")
-    if result.summary:
-        with st.expander("What the search model says"):
-            st.caption(
-                f"Written by {result.summary_model or 'the search model'} from the top results. "
-                "It is not a memory. Check it against the clips."
-            )
-            st.markdown(result.summary)
-    return more
+    count: int = 4,
+    heading: str = "From your video",
+    caption: bool = True,
+) -> None:
+    """A few moments as a small 2×2 picture grid; tap a picture to play from there."""
+    clips = clips[:count]
+    if not clips:
+        return
+    st.markdown(f'<p class="result-head">{html.escape(heading)}</p>', unsafe_allow_html=True)
+    playing = None
+    for start in range(0, len(clips), 2):
+        columns = st.columns(2, gap="small")
+        for column, clip in zip(columns, clips[start : start + 2]):
+            open_id = f"{turn}:{clip.clip_id}"
+            key = _safe_key(f"tile:{open_id}")
+            is_open = st.session_state.get("search_open") == open_id
+            with column, st.container(key=f"shown-tile-{key}"):
+                st.markdown(_tile_background(key, _frame_path(clip)), unsafe_allow_html=True)
+                if st.button(
+                    "Close" if is_open else "Play",
+                    key=f"tile-play-{key}",
+                    icon=":material/close:" if is_open else ":material/play_arrow:",
+                    width="stretch",
+                ):
+                    st.session_state["search_open"] = "" if is_open else open_id
+                    st.rerun()
+                if caption:
+                    st.markdown(f'<p class="tile-when">{html.escape(when_label(clip))}</p>', unsafe_allow_html=True)
+            if is_open:
+                playing = clip
+    if playing is not None:
+        _play_video(lambda: _media(playing), playing.start_sec)
 
 
 def _play_button(open_id: str, *, key: str) -> None:
