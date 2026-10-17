@@ -27,7 +27,7 @@ No passive camera. No facial recognition. No medical advice. No safety-alarm fra
 
 ## How an answer stays tied to a real clip
 
-1. Ask logs in to the video search API and calls `POST /api/v1/search` with the question, `top_k` 5, and `min_similarity` 0.15. The JWT stays in memory. A hit that names a journal `clip_id` is played from that clip. Otherwise Ask uses the local cosine rank (`search_day`): Cosmos Embed1 plus activity tags. Practice clips live in VastDB schema `reminisce`, table `clips`, so this is the usual path for them. Only when the journal has no match does Ask use an archive-only hit, and only at similarity 0.3 or above. The shared archive is public street and warehouse footage, so a weaker hit would show a stranger's street as her memory. The trace field `retrieval_path` is `vss` or `journal`.
+1. Ask logs in to the video search API and calls `POST /api/v1/search` once, with the question words, any filters, `top_k` 10, and `min_similarity` 0.15. The JWT stays in memory. A hit that names a journal `clip_id` is played from that clip. Otherwise Ask uses the local cosine rank (`search_day`): Cosmos Embed1 plus activity tags. Practice clips live in VastDB schema `reminisce`, table `clips`, so this is the usual path for them. Only when the journal has no match does Ask use an archive-only hit, and only at similarity 0.3 or above. The shared archive is public street and warehouse footage, so a weaker hit would show a stranger's street as her memory. The trace field `retrieval_path` is `vss` or `journal`.
 2. The W&B model may only pick ids from that short list. Two prompts are compared in the eval: `strict` and `warm`. The app uses `warm`. The eval script still ranks the journal directly so those counts stay about the embeddings.
 3. The sentence on screen is the description plus `Source:` and the id. That id is the journal `clip_id` when the hit matches one, otherwise the segment or source id returned by search. The model's free text is kept in the trace and the eval file. It is not shown as the memory.
 4. If the model names an id that was not retrieved, that id is dropped. If it names nothing usable, the top retrieved clip is cited instead. If nothing was retrieved, the answer is "I couldn't find that moment in your day." and it cites nothing.
@@ -52,9 +52,12 @@ flowchart LR
   cosmos --> embed[Cosmos Embed1]
   embed --> journal[Local journal]
   embed --> vast[VAST reminisce.clips]
-  search[Video search API] --> agent[vss_search or search_day]
-  journal --> agent
-  agent --> ui[Streamlit]
+  journal --> agent[search_day, then vss_search]
+  search[Video search API] --> agent
+  search --> results[find_clips and archive results]
+  journal --> results
+  agent --> ui[Streamlit Ask]
+  results --> ui
   agent --> trace[Trace log and W and B]
 ```
 
@@ -63,9 +66,9 @@ flowchart LR
 | Capture | Upload, or an 8 second camera recording. Practice clips are 6 second title cards. |
 | Understanding | Cosmos Reason describes one frame from the clip. |
 | Index | A 256-number Embed1 vector of that description, stored on the clip row in VastDB schema `reminisce`, table `clips`. |
-| Agent | Video search first, then the local journal rank. W&B serverless inference selects ids from that list. The tools are `vss_search`, `search_day`, `get_clip`, and `daily_digest`. |
-| UI | Streamlit, under `frontend/`. 2×2 thumbnail gallery, ask, search, story, carer share, eval. |
-| Observability | `data/journal/traces.jsonl` for every ask, story, and digest. `scripts/run_eval.py` writes `data/journal/eval_latest.json` and a W&B table. |
+| Agent | A video search hit that names a journal clip, then the local journal rank, then a strong archive-only hit. W&B serverless inference selects ids from that list. The tools are `vss_search`, `search_day`, `find_clips`, `get_clip`, and `daily_digest`. |
+| UI | Streamlit, under `frontend/`. Three tabs: **My day** (2×2 thumbnail gallery), **Ask** (answer plus search results and filters), and **Story**. **Eval** is a small button. |
+| Observability | `data/journal/traces.jsonl` for every ask, search, story, and digest. `scripts/run_eval.py` writes `data/journal/eval_latest.json` and a W&B table. |
 
 Ask posts to `https://api.inference.wandb.ai/v1`. The chat model defaults to `meta-llama/Llama-3.1-8B-Instruct`. Override it with `REMINISCE_LLM_MODEL`. Cosmos Reason, Cosmos Embed1, and Canary are reached through `COSMOS3_REASON_URL`, `COSMOS_EMBED1_URL`, and `CANARY_1B_URL`. The model id for Cosmos and Embed is read from each server's `/v1/models`.
 
@@ -100,7 +103,9 @@ VastDB keeps every write. The newest `inserted_at` for a `clip_id` is the curren
 ```text
 frontend/app.py            Streamlit entry
 frontend/style.py          Blank Street palette
-frontend/views/            My day, Ask (with search results), Story, Eval
+frontend/views/ask.py      Ask: question, filters, answer, search results
+frontend/views/search.py   Filters and the saved-clip and archive result cards
+frontend/views/            Also My day, Story, Eval, and carer.py (not in the main row)
 app.py                     Same entry, for the previous command
 reminisce/catalog.py       Ten questions and the practice-clip labels
 reminisce/media.py         ffmpeg: title cards, frames, upload, camera
@@ -115,7 +120,7 @@ scripts/check_stack.py     Probe the services, print no secrets
 scripts/make_sample_clips.py
 scripts/index_clips.py
 scripts/run_eval.py
-tests/test_reminisce.py    Grounding, search fallback, and share rules, no network
+tests/test_reminisce.py    Grounding, search order, filters, parsing, and share rules, no network
 ```
 
 The labelled questions:
@@ -247,7 +252,7 @@ Record it yourself, 5 to 30 seconds, mp4 or webm, under 25 MB. In **My day**, ta
 
 ## Privacy
 
-The older adult owns the clips. Send is per clip. Take it back removes the carer from `shared_with` and writes that row to VastDB. The daily note is off until the switch on the Carer page is on, and even then it only summarises clips already sent. There is no background recorder.
+The older adult owns the clips. Send is per clip. Take it back removes the carer from `shared_with` and writes that row to VastDB. The carer view and its daily note are not in the main row in this build. When used, the daily note only summarises clips already sent. There is no background recorder.
 
 ## Also in this repository
 
@@ -255,4 +260,6 @@ The Streamlit journal above is the app. These folders are separate tools already
 
 - `video-chunker/` cuts one local video into timed mp4 chunks.
 - `pipeline/` writes 5-second Cosmos Reason and YOLO descriptions for a later language-model step. It does not call that model.
-- `library/example-descriptions/` holds sample window annotations for that later step.
+- `memory/` reads the pipeline's `llm_input` and files each window into a general or key memory store, plus a last-seen file for tracked objects. See `memory/README.md`.
+- `library/example-descriptions/` holds sample window annotations for those later steps, including `home-tea-reading.annotations.jsonl` (24 home kitchen windows).
+- `IMG_2512.MOV` and `IMG_2516.mp4` are videos added by the team. No code in this repository reads them yet.
