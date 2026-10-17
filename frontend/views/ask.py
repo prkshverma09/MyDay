@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-import html
 import time
 
 import streamlit as st
 
 from frontend.views.common import _paint_connection, _show_answer
+from frontend.views.progress import NOTE, Steps, plural, replay
 from frontend.views.search import (
     MAX_RESULTS,
     PAGE,
     archive_search,
     build_filters,
-    filter_line,
-    filters_box,
+    filter_parts,
     journal_matches,
     show_archive,
     show_journal,
@@ -35,55 +34,128 @@ def _page_ask(prefs: dict) -> None:
     if audio is not None and st.button("Use voice", icon=":material/mic:", width="stretch"):
         _transcribe(audio)
     question = st.text_input("Question", placeholder="did I have lunch today?", key="owner_question")
-    window, picked = filters_box()
     if st.button("Ask", key="ask-go", type="primary", icon=":material/chat_bubble:", width="stretch") and question.strip():
-        _run(question.strip(), window, picked, prefs, top_k=PAGE)
+        _run(question.strip(), prefs, top_k=PAGE)
     state = st.session_state.get("ask_state")
     if state:
         _show(state, prefs)
     _paint_connection(link)
 
 
-def _run(question: str, window: str, picked: dict[str, str], prefs: dict, *, top_k: int, answer=None) -> None:
+def _agent_progress(steps: Steps):
+    """Turn agent events into lines a person would say out loud."""
+
+    videos = {"asked": 0, "ready": 0}
+
+    def on_event(event: str, **info) -> None:
+        if videos["asked"] and event not in ("fetching", "fetched"):
+            asked, ready = videos["asked"], videos["ready"]
+            if asked == 1:
+                steps.done("Video ready" if ready else "The video could not be loaded, so only the words are shown")
+            else:
+                steps.done(f"{ready} of {asked} videos ready")
+            videos["asked"] = videos["ready"] = 0
+        if event == "ranking":
+            steps.start("Looking through your saved clips")
+        elif event == "ranked":
+            count = info.get("count", 0)
+            steps.done(f"Found {plural(count, 'clip')} that might match" if count else "None of your saved clips match")
+        elif event == "using_archive":
+            steps.note(f"Using {plural(info.get('count', 0), 'close match', 'close matches')} from the camera archive")
+        elif event == "choosing":
+            count = info.get("count", 0)
+            steps.start("Choosing the moment that answers your question" if count > 1 else "Looking closely at that moment")
+        elif event == "chosen":
+            if info.get("by_model"):
+                steps.done(f"Picked {plural(info.get('count', 1), 'moment')}")
+            else:
+                steps.done("Picked the closest moment")
+        elif event == "fetching":
+            if not videos["asked"]:
+                steps.start("Fetching the video")
+            videos["asked"] += 1
+        elif event == "fetched":
+            videos["ready"] += 1 if info.get("ok") else 0
+        elif event == "checking":
+            steps.start("Making sure the answer matches the clip")
+        elif event == "checked":
+            if not info.get("count"):
+                steps.done("Nothing in your day matches that")
+            elif info.get("grounded"):
+                steps.done("The answer matches the clip" if info.get("count") == 1 else "The answer matches the clips")
+            else:
+                steps.done("The answer did not match the clip, so it is held back", icon=NOTE)
+
+    return on_event
+
+
+def _run(question: str, prefs: dict, *, top_k: int, answer=None) -> None:
     settings = load_settings()
-    words, filters = build_filters(question, window, picked)
+    words, filters = build_filters(question)
     started = time.perf_counter()
-    with st.spinner("Looking…"):
+    fresh = answer is None
+    previous = st.session_state.get("ask_state") or {}
+    if not fresh:
+        with st.spinner("Looking for more…"):
+            result, note = archive_search(words, filters, top_k=top_k)
+        journal = previous.get("journal", [])
+        steps_label, step_lines = previous.get("steps_label", ""), previous.get("steps", [])
+    else:
+        steps = Steps("Looking for that moment")
+        steps.start("Reading your question")
         try:
             vector, _model = embed_text(question, settings)
+            steps.done("Understood your question")
         except ModelError:
             vector = []
+            steps.done("Reading your question word by word", icon=NOTE)
+        narrowed = filter_parts(filters)
+        if narrowed:
+            steps.note(f"Looking only at {narrowed}")
+        steps.start("Searching the camera archive")
         result, note = archive_search(words, filters, top_k=top_k)
+        if result is None:
+            steps.done("The camera archive is not reachable right now", icon=NOTE)
+        elif result.moments:
+            steps.done(f"Found {plural(len(result.moments), 'video')} in the camera archive")
+        else:
+            steps.done("Nothing in the camera archive matches")
         clips = load_clips()
-        if answer is None:
 
-            def searcher(_query: str):
-                if result is None:
-                    raise VssSearchError(note or "search unavailable")
-                return result.hits
+        def searcher(_query: str):
+            if result is None:
+                raise VssSearchError(note or "search unavailable")
+            return result.hits
 
-            try:
-                answer = answer_question(
-                    question,
-                    clips_since(clips, filters.time_window),
-                    vector,
-                    role="owner",
-                    owner_id=prefs["owner_id"],
-                    carer_id=prefs["carer_id"],
-                    prompt_version="warm",
-                    llm=ChatModel(settings),
-                    searcher=searcher,
-                )
-            except (ModelError, RuntimeError) as exc:
-                st.error(safe_error(exc))
-                return
-            trace_from_answer("answer", question, answer, time.perf_counter() - started)
+        try:
+            answer = answer_question(
+                question,
+                clips_since(clips, filters.time_window),
+                vector,
+                role="owner",
+                owner_id=prefs["owner_id"],
+                carer_id=prefs["carer_id"],
+                prompt_version="warm",
+                llm=ChatModel(settings),
+                searcher=searcher,
+                progress=_agent_progress(steps),
+            )
+        except (ModelError, RuntimeError) as exc:
+            steps.finish("Something went wrong", ok=False)
+            st.error(safe_error(exc))
+            return
+        trace_from_answer("answer", question, answer, time.perf_counter() - started)
         journal = journal_matches(words, clips, vector, filters, prefs["owner_id"])
+        others = len([hit for hit in journal if hit.clip.clip_id not in set(answer.citations)])
+        if others:
+            steps.done(f"{plural(others, 'other saved clip')} also {'matches' if others == 1 else 'match'}")
+        outcome = "Found it" if answer.citations else "Could not find that moment"
+        steps_label = f"{outcome} · {time.perf_counter() - started:.1f} s"
+        steps.finish(steps_label)
+        step_lines = steps.lines
     latency = time.perf_counter() - started
     st.session_state["ask_state"] = {
         "question": question,
-        "window": window,
-        "picked": picked,
         "words": words,
         "filters": filters,
         "answer": answer,
@@ -91,6 +163,9 @@ def _run(question: str, window: str, picked: dict[str, str], prefs: dict, *, top
         "result": result,
         "top_k": top_k,
         "latency": latency,
+        "steps": step_lines,
+        "steps_label": steps_label,
+        "fresh": fresh,
     }
     st.session_state["search_open"] = ""
     moments = [moment.citation_id for moment in (result.moments if result else [])]
@@ -114,11 +189,11 @@ def _run(question: str, window: str, picked: dict[str, str], prefs: dict, *, top
 
 
 def _show(state: dict, prefs: dict) -> None:
-    line = filter_line(state["question"], state["words"], state["filters"])
-    if line:
-        st.markdown(f'<p class="quiet-note">Looking for {html.escape(line)}</p>', unsafe_allow_html=True)
+    fresh = state.pop("fresh", False)
+    if not fresh:
+        replay(state.get("steps_label") or "How I found this", state.get("steps") or [])
     answer = state["answer"]
-    _show_answer(answer, prefs, role="owner")
+    _show_answer(answer, prefs, role="owner", stream=fresh)
     skip = set(answer.citations)
     show_journal(state["journal"], state["filters"], prefs, skip=skip)
     wants_more = show_archive(
@@ -131,8 +206,6 @@ def _show(state: dict, prefs: dict) -> None:
     if wants_more:
         _run(
             state["question"],
-            state["window"],
-            state["picked"],
             prefs,
             top_k=min(MAX_RESULTS, state["top_k"] + PAGE),
             answer=answer,

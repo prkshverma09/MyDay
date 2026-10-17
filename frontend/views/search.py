@@ -29,8 +29,6 @@ WHEN = {
     "Last 30 days": "30d",
 }
 WHEN_LABEL = {value: label for label, value in WHEN.items()}
-LABELS = {"location": "Place", "camera_id": "Camera", "capture_type": "Kind", "object_classes": "Object"}
-ANY = "Any"
 PAGE = 10
 MAX_RESULTS = 50
 
@@ -48,34 +46,9 @@ def _clock(seconds: float) -> str:
     return f"{whole // 60}:{whole % 60:02d}"
 
 
-def filters_box() -> tuple[str, dict[str, str]]:
-    """The Filters expander. Returns the time window and the archive metadata filters."""
-    options = metadata_options()
-    picked: dict[str, str] = {}
-    with st.expander("Filters"):
-        when_label = st.selectbox("When", list(WHEN), key="search_when")
-        for field_name, label in LABELS.items():
-            values = options.get(field_name) or []
-            if not values:
-                continue
-            choice = st.selectbox(label, [ANY, *values], key=f"search-{field_name}", format_func=_pretty)
-            if choice != ANY:
-                picked[field_name] = choice
-        if not options:
-            st.markdown(
-                '<p class="quiet-note">Archive filters appear when video search is reachable.</p>',
-                unsafe_allow_html=True,
-            )
-    return WHEN[when_label], picked
-
-
-def build_filters(query: str, window: str, picked: dict[str, str]) -> tuple[str, SearchFilters]:
-    """Words for the archive, plus filters. Choices in Filters win over phrases in the question."""
-    words, parsed = parse_query(query, metadata_options())
-    return words, SearchFilters(
-        time_window=window if window != "all" else parsed.time_window,
-        metadata={**parsed.metadata, **picked},
-    )
+def build_filters(query: str) -> tuple[str, SearchFilters]:
+    """Words for the archive, plus the time and place phrases lifted from the question."""
+    return parse_query(query, metadata_options())
 
 
 def archive_search(words: str, filters: SearchFilters, *, top_k: int) -> tuple[SearchResult | None, str]:
@@ -91,18 +64,27 @@ def journal_matches(words: str, clips: list[Clip], vector: list[float], filters:
     return find_clips(words, clips_since(clips, filters.time_window), vector, owner_id=owner_id)
 
 
-def filter_line(query: str, words: str, filters: SearchFilters) -> str:
-    """Empty unless a filter is in force, so a plain question gets no extra line."""
-    if not filters.active():
-        return ""
-    parts = []
-    if words != query.strip(" ,.?!"):
-        parts.append(f"“{words}”")
-    if filters.time_window != "all":
-        parts.append(WHEN_LABEL.get(filters.time_window, filters.time_window))
+SPOKEN = {
+    "location": "in {}",
+    "camera_id": "from camera {}",
+    "capture_type": "{} footage",
+    "object_classes": "showing a {}",
+}
+
+
+def filter_parts(filters: SearchFilters) -> str:
+    """"the last 24 hours, in New York", or empty when nothing narrows the search."""
+    rest = []
     for field_name, value in filters.metadata.items():
-        parts.append(f"{LABELS.get(field_name, field_name)}: {_pretty(value)}")
-    return " · ".join(parts)
+        shown = _pretty(value).title() if field_name == "location" else _pretty(value)
+        rest.append(SPOKEN.get(field_name, "{}").format(shown))
+    if filters.time_window != "all":
+        head = "the " + WHEN_LABEL.get(filters.time_window, filters.time_window).lower()
+    elif rest:
+        head = "videos"
+    else:
+        return ""
+    return " ".join([head, ", ".join(rest)]).strip()
 
 
 def show_journal(hits, filters: SearchFilters, prefs: dict, *, skip: set[str]) -> None:

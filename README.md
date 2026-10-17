@@ -6,20 +6,21 @@ My Day is a daily memory journal for an older adult living alone, or living with
 
 This is a Streamlit app for the Builders Challenge. It calls NVIDIA Cosmos Reason and Cosmos Embed1, stores clip rows in VastDB schema `reminisce`, table `clips`, and uses CoreWeave / Weights & Biases serverless inference for clip selection. The Streamlit UI is the product.
 
-The ten practice clips are synthetic title cards generated on the machine that builds them. They are not recordings of a real person, and they are not patient data. Upload a clip you have consent to use when you want a real moment in the journal.
+The app starts with an empty journal. Upload clips you have consent to use. The ten practice clips are synthetic title cards kept in `data/practice/` for testing and the eval only. They are not recordings of a real person, and the running app does not show them.
 
 ## What a person can do
 
 - Add a clip by uploading a file, or record 8 seconds when this computer has a camera.
 - See the day as a thumbnail gallery: a 2×2 grid of four previews. Each preview is a frame labelled with the part of the day (Morning, Afternoon, or Evening) and the time. **Play** opens that clip. **Back** and **Next** move through further pages of four.
 - Ask a question in a text box, or upload a short voice question (Canary transcribes it when the speech model is up). Ask is connected to CoreWeave / W&B serverless inference at `https://api.inference.wandb.ai/v1`. The model is `meta-llama/Llama-3.1-8B-Instruct` unless `REMINISCE_LLM_MODEL` is set. The page shows `Connected to` that model when the reply came from it.
+- Watch each step happen in plain words while Ask works ("Looking through your saved clips", "Making sure the answer matches the clip"), and while a new clip is added ("Cosmos is looking at the picture", then what Cosmos saw). The steps fold away when done, and the answer types itself out. `answer_question` and `ingest_video` report these steps through an optional `progress` callback.
 - Read a grounded answer that quotes the Cosmos description and names the `clip_id` (`Source: clip_id`).
 - Play the clip the answer came from.
-- Under the answer, see search results: other saved clips that match, then the shared camera archive grouped by video, each with the time of the best moment, the place, the camera, the match score, and **Play**. Phrases like `in new york` or `this week` become filters. **Filters** also offers time, place, camera, kind, and object. **Show more** fetches up to 50 results.
+- Under the answer, see search results: other saved clips that match, then the shared camera archive grouped by video, each with the time of the best moment, the place, the camera, the match score, and **Play**. There is nothing to set: phrases like `in new york` or `this week` in the question narrow the search by themselves. **Show more** fetches up to 50 results.
 - Send one clip to a carer, or take it back.
 - Play a short story of three to five clips. The sentences are the clip descriptions, in time order.
 
-The main row has three tabs: **My day**, **Ask**, and **Story**. **Eval** is a small button at the top of the page. The carer view in `frontend/views/carer.py` is not in the main row.
+The main row has three tabs: **My day**, **Ask**, and **Story**. **Eval** is a small button at the top of the page, shown only when an eval report exists. The carer view in `frontend/views/carer.py` is not in the main row.
 
 ## What this build does not do
 
@@ -27,7 +28,7 @@ No passive camera. No facial recognition. No medical advice. No safety-alarm fra
 
 ## How an answer stays tied to a real clip
 
-1. Ask logs in to the video search API and calls `POST /api/v1/search` once, with the question words, any filters, `top_k` 10, and `min_similarity` 0.15. The JWT stays in memory. A hit that names a journal `clip_id` is played from that clip. Otherwise Ask uses the local cosine rank (`search_day`): Cosmos Embed1 plus activity tags. Practice clips live in VastDB schema `reminisce`, table `clips`, so this is the usual path for them. Only when the journal has no match does Ask use an archive-only hit, and only at similarity 0.3 or above. The shared archive is public street and warehouse footage, so a weaker hit would show a stranger's street as her memory. The trace field `retrieval_path` is `vss` or `journal`.
+1. Ask logs in to the video search API and calls `POST /api/v1/search` once, with the question words, any filters, `top_k` 10, and `min_similarity` 0.15. The JWT stays in memory. A hit that names a journal `clip_id` is played from that clip. Otherwise Ask uses the local cosine rank (`search_day`): Cosmos Embed1 plus activity tags. Journal clips are not in the shared archive, so this is the usual path for them. Only when the journal has no match does Ask use an archive-only hit, and only at similarity 0.3 or above. The shared archive is public street and warehouse footage, so a weaker hit would show a stranger's street as her memory. The trace field `retrieval_path` is `vss` or `journal`.
 2. The W&B model may only pick ids from that short list. Two prompts are compared in the eval: `strict` and `warm`. The app uses `warm`. The eval script still ranks the journal directly so those counts stay about the embeddings.
 3. The sentence on screen is the description plus `Source:` and the id. That id is the journal `clip_id` when the hit matches one, otherwise the segment or source id returned by search. The model's free text is kept in the trace and the eval file. It is not shown as the memory.
 4. If the model names an id that was not retrieved, that id is dropped. If it names nothing usable, the top retrieved clip is cited instead. If nothing was retrieved, the answer is "I couldn't find that moment in your day." and it cites nothing.
@@ -37,7 +38,7 @@ No passive camera. No facial recognition. No medical advice. No safety-alarm fra
 
 Ask makes one archive search call. Its hits feed the grounded answer above and the result list below, and the result list skips anything the answer already shows.
 
-1. `parse_query` lifts a time phrase (`last hour`, `today`, `this week`, `this month`) and a place name from `/api/v1/metadata/schema` out of the words. Cameras, kinds, and objects come only from **Filters**, because words like `traffic` or `person` are usually what is being searched for.
+1. `parse_query` lifts a time phrase (`last hour`, `today`, `this week`, `this month`) and a place name from `/api/v1/metadata/schema` out of the words. Cameras, kinds, and objects are left in the words, because words like `traffic` or `person` are usually what is being searched for.
 2. Saved clips: `find_clips` keeps a clip only when a search word shares a stem with its tags or Cosmos description, then orders by Embed1 cosine. Some title-card embeddings sit near every query, so cosine alone never admits a clip. The time window applies. Place, camera, kind, and object filters do not, because journal clips have none.
 3. Camera archive: `POST /api/v1/search` with `time_filter` (or a `custom` 30-day range) and `metadata_filters`. The page shows `chunk_results`: one card per video, pointed at its best segment. **Play** downloads that segment through `/api/v1/videos/stream` on the server, so the JWT never reaches the browser.
 4. `llm_synthesis` is shown only inside **What the search model says**, labelled as model text. It is never used as a memory.
@@ -63,11 +64,11 @@ flowchart LR
 
 | Layer | What it is |
 | --- | --- |
-| Capture | Upload, or an 8 second camera recording. Practice clips are 6 second title cards. |
+| Capture | Upload, or an 8 second camera recording. The test-only practice clips are 6 second title cards. |
 | Understanding | Cosmos Reason describes one frame from the clip. |
 | Index | A 256-number Embed1 vector of that description, stored on the clip row in VastDB schema `reminisce`, table `clips`. |
 | Agent | A video search hit that names a journal clip, then the local journal rank, then a strong archive-only hit. W&B serverless inference selects ids from that list. The tools are `vss_search`, `search_day`, `find_clips`, `get_clip`, and `daily_digest`. |
-| UI | Streamlit, under `frontend/`. Three tabs: **My day** (2×2 thumbnail gallery), **Ask** (answer plus search results and filters), and **Story**. **Eval** is a small button. |
+| UI | Streamlit, under `frontend/`. Three tabs: **My day** (2×2 thumbnail gallery), **Ask** (answer plus search results), and **Story**. **Eval** is a small button. |
 | Observability | `data/journal/traces.jsonl` for every ask, search, story, and digest. `scripts/run_eval.py` writes `data/journal/eval_latest.json` and a W&B table. |
 
 Ask posts to `https://api.inference.wandb.ai/v1`. The chat model defaults to `meta-llama/Llama-3.1-8B-Instruct`. Override it with `REMINISCE_LLM_MODEL`. Cosmos Reason, Cosmos Embed1, and Canary are reached through `COSMOS3_REASON_URL`, `COSMOS_EMBED1_URL`, and `CANARY_1B_URL`. The model id for Cosmos and Embed is read from each server's `/v1/models`.
@@ -94,7 +95,7 @@ Each clip row:
 }
 ```
 
-`source_citation` is the same id as `clip_id`. `description_source` is `cosmos` or `fallback`. A fallback caption is the on-screen label, and the UI says so. The embedding itself lives in the journal and in VastDB as `embedding_json`. It is not shown in the UI.
+A new clip is named by the date and time it was added, for example `clip_20261017_144612`, and its file is `data/clips/uploads/clip_20261017_144612.mp4`. A second clip in the same second gets `_2`. The practice clips keep `clip_001` to `clip_010`. `source_citation` is the same id as `clip_id`. `description_source` is `cosmos` or `fallback`. A fallback caption is the on-screen label, and the UI says so. The embedding itself lives in the journal and in VastDB as `embedding_json`. It is not shown in the UI.
 
 VastDB keeps every write. The newest `inserted_at` for a `clip_id` is the current row, so Send inserts a new row rather than editing the shared VSS tables.
 
@@ -103,8 +104,8 @@ VastDB keeps every write. The newest `inserted_at` for a `clip_id` is the curren
 ```text
 frontend/app.py            Streamlit entry
 frontend/style.py          Blank Street palette
-frontend/views/ask.py      Ask: question, filters, answer, search results
-frontend/views/search.py   Filters and the saved-clip and archive result cards
+frontend/views/ask.py      Ask: question, answer, search results
+frontend/views/search.py   Saved-clip and archive result cards
 frontend/views/            Also My day, Story, Eval, and carer.py (not in the main row)
 app.py                     Same entry, for the previous command
 reminisce/catalog.py       Ten questions and the practice-clip labels
@@ -178,31 +179,13 @@ Check Cosmos, Embed1, Canary, W&B, and VastDB. The command prints status lines o
 .venv/bin/python scripts/check_stack.py
 ```
 
-Create the ten practice clips:
-
-```bash
-.venv/bin/python scripts/make_sample_clips.py
-```
-
-Describe them with Cosmos, embed the descriptions, and write VastDB:
-
-```bash
-.venv/bin/python scripts/index_clips.py
-```
-
-Run the unit tests:
+Run the unit tests. They need no clips and no network:
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Run the ten questions twice, once for each prompt, and log the table to W&B:
-
-```bash
-.venv/bin/python scripts/run_eval.py
-```
-
-Start the app. Leave this command running.
+Start the app. Leave this command running. The journal starts empty, under `data/journal/`.
 
 ```bash
 .venv/bin/streamlit run frontend/app.py
@@ -210,10 +193,38 @@ Start the app. Leave this command running.
 
 Open `http://127.0.0.1:8501`.
 
+### Practice clips, for testing only
+
+`REMINISCE_DATA=data/practice` points every command at a separate practice journal, so the practice clips never mix with real ones.
+
+Create the ten practice clips:
+
+```bash
+REMINISCE_DATA=data/practice .venv/bin/python scripts/make_sample_clips.py
+```
+
+Describe them with Cosmos, embed the descriptions, and write VastDB:
+
+```bash
+REMINISCE_DATA=data/practice .venv/bin/python scripts/index_clips.py
+```
+
+Run the ten questions twice, once for each prompt, and log the table to W&B:
+
+```bash
+REMINISCE_DATA=data/practice .venv/bin/python scripts/run_eval.py
+```
+
+Open the app on the practice journal, with the Eval button:
+
+```bash
+REMINISCE_DATA=data/practice .venv/bin/streamlit run frontend/app.py
+```
+
 To describe a single practice clip again:
 
 ```bash
-.venv/bin/python scripts/index_clips.py --clip clip_001 --force
+REMINISCE_DATA=data/practice .venv/bin/python scripts/index_clips.py --clip clip_001 --force
 ```
 
 ## Eval
@@ -228,14 +239,14 @@ To describe a single practice clip again:
 - **Hallucinations:** `clip_id`s in the raw model text that are not in the journal. They are counted and then dropped. They are not served.
 - **Latency:** mean seconds per question, including the embedding call and the W&B call.
 
-The same numbers are on the Eval page. W&B receives a table named `results` and the summary counts. The run URL is printed as `wandb: ...` and stored in `data/journal/eval_latest.json`.
+The same numbers are on the Eval page. W&B receives a table named `results` and the summary counts. The run URL is printed as `wandb: ...` and stored in `data/practice/journal/eval_latest.json`.
 
 ## Demo, about three minutes
 
-1. **My day.** Show lunch, the walk, and the visit in the 2×2 gallery. Say that these practice clips stand in for a consented recording, and that unshared clips stay here.
-2. **Ask.** Type `did I have lunch today?` and play the clip under the answer. Point at `Source: clip_001` and the connected model line.
+1. **My day.** Upload two or three of your own short clips first. Show them in the 2×2 gallery and say that unshared clips stay here.
+2. **Ask.** Ask about one of them, for example `did I have lunch today?`, and play the clip under the answer. Point at the `Source:` id and the connected model line.
 3. **Search.** Ask `a person walking a dog in new york`. The answer says it is not in her day, and the camera archive below shows New York videos. Play one.
-4. **Eval.** Show hybrid retrieval, grounded answers, and the W&B line.
+4. **Eval.** From the practice journal, show hybrid retrieval, grounded answers, and the W&B line.
 5. Close on control: she shares what she wants, when she wants.
 
 ## Use a real consented clip
@@ -245,9 +256,9 @@ Record it yourself, 5 to 30 seconds, mp4 or webm, under 25 MB. In **My day**, ta
 ## When something fails
 
 - `check_stack.py` exits 1: read the failing line. Cosmos and Embed must be `ok` before indexing. Canary can fail; typing a question still works.
-- Cosmos descriptions look generic: run `.venv/bin/python scripts/index_clips.py --force` and read the one-line description printed for each clip. If a line says `fallback`, that clip did not get a Cosmos description.
+- Cosmos descriptions look generic: run `REMINISCE_DATA=data/practice .venv/bin/python scripts/index_clips.py --force` and read the one-line description printed for each clip. If a line says `fallback`, that clip did not get a Cosmos description.
 - Retrieval is under 8/10: the Eval table shows `embedding` and `hybrid` for each question. Hybrid is allowed to use the activity tags as a fallback. Say the real count in the demo.
-- VastDB did not mirror: the journal still works. `data/journal/vast_status.json` has a redacted reason. Re-run `scripts/index_clips.py --force` after VastDB is reachable.
+- VastDB did not mirror: the journal still works. `data/journal/vast_status.json` has a redacted reason. For a practice clip, re-run `scripts/index_clips.py --force` with `REMINISCE_DATA=data/practice` after VastDB is reachable.
 - Voice upload does nothing useful: Canary is optional. Type the question.
 
 ## Privacy

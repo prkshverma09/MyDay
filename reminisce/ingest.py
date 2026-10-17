@@ -28,18 +28,34 @@ def ingest_video(
     shared_with: list[str] | None = None,
     journal_path: Path | None = None,
     mirror: bool = True,
+    progress=None,
 ) -> Clip:
+    """`progress(event, **info)` reports each step: measuring, measured, frame, framed,
+    describing, described, embedding, embedded, saving, saved, mirroring, mirrored."""
+
+    def emit(event: str, **info) -> None:
+        if progress is not None:
+            progress(event, **info)
+
+    emit("measuring")
     duration = probe_duration(video)
     validate_duration(duration)
+    emit("measured", seconds=duration)
     frame = CLIPS_DIR / "frames" / f"{clip_id}.jpg"
+    emit("frame")
     extract_frame(video, frame)
+    emit("framed", path=str(frame))
+    emit("describing")
     try:
         description = describe_image(frame)
         source = "cosmos"
     except ModelError:
         description = fallback_description(tags, subtitle)
         source = "fallback"
+    emit("described", source=source, description=description)
+    emit("embedding")
     vector, _model = embed_text(description)
+    emit("embedded")
     try:
         relpath = str(video.resolve().relative_to(ROOT))
     except ValueError:
@@ -58,13 +74,17 @@ def ingest_video(
         media_relpath=relpath,
         description_source=source,
     )
+    emit("saving")
     upsert_clip(clip, journal_path)
+    emit("saved")
     if mirror:
+        emit("mirroring")
         try:
             vast_index.mirror_clip(clip)
+            emit("mirrored", ok=True)
         except Exception:
             # The local journal is already saved. vast_index records a redacted status.
-            pass
+            emit("mirrored", ok=False)
     return clip
 
 

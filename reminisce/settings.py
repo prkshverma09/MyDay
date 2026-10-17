@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / "data"
+# Practice clips live in data/practice. Point REMINISCE_DATA there to test with them.
+DATA = ROOT / os.environ.get("REMINISCE_DATA", "data")
 CLIPS_DIR = DATA / "clips"
 JOURNAL_DIR = DATA / "journal"
 JOURNAL_PATH = JOURNAL_DIR / "clips.json"
