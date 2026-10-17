@@ -23,7 +23,6 @@ NAV = (
     ("My day", "nav-day", ":material/home:"),
     ("Ask", "nav-ask", ":material/chat_bubble:"),
     ("Story", "nav-story", ":material/auto_stories:"),
-    ("Carer", "nav-carer", ":material/favorite:"),
 )
 
 def _prefs() -> dict:
@@ -52,7 +51,7 @@ def _nav() -> str:
             st.rerun()
     st.title("My Day")
     st.markdown('<p class="tagline">Make every day count.</p>', unsafe_allow_html=True)
-    columns = st.columns(4)
+    columns = st.columns(len(NAV))
     for column, (label, key, icon) in zip(columns, NAV):
         selected = st.session_state["nav"] == label
         with column:
@@ -98,8 +97,12 @@ def _clip_picture(clip: Clip) -> None:
         st.info("Video is not on this computer.")
 
 
+def _first_upper(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
 def _clip_words(clip: Clip, *, description: bool) -> None:
-    when = html.escape(human_when(clip.recorded_at).capitalize())
+    when = html.escape(_first_upper(human_when(clip.recorded_at)))
     st.markdown(f'<p class="clip-time">{when}</p>', unsafe_allow_html=True)
     if description:
         line = html.escape(" ".join(clip.cosmos_description.split()))
@@ -150,7 +153,7 @@ def _thumb_slot(clip: Clip | None, index: int) -> None:
         else:
             st.info("No picture")
         part = html.escape(day_part(clip.recorded_at))
-        when = html.escape(human_when(clip.recorded_at).capitalize())
+        when = html.escape(_first_upper(human_when(clip.recorded_at)))
         st.markdown(f'<p class="thumb-label">{part} · {when}</p>', unsafe_allow_html=True)
         if st.button(
             "Play",
@@ -219,6 +222,10 @@ def _ask(question: str, prefs: dict, *, role: str) -> None:
         st.error(safe_error(exc))
         return
     trace_from_answer("answer" if role == "owner" else "carer_answer", question, answer, time.perf_counter() - started)
+    _show_answer(answer, prefs, role=role)
+
+
+def _show_answer(answer, prefs: dict, *, role: str) -> None:
     if not answer.grounded:
         st.error("This answer was withheld because it was not tied to a real clip.")
         return

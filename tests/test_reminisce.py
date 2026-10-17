@@ -4,12 +4,30 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
-from reminisce.agent import ABSTAIN, answer_question, clips_for_viewer, daily_digest, is_grounded, story
+from reminisce.agent import (
+    ABSTAIN,
+    answer_question,
+    clips_for_viewer,
+    clips_since,
+    daily_digest,
+    find_clips,
+    is_grounded,
+    story,
+)
 from reminisce.store import Clip, set_shared, upsert_clip
 from reminisce.vectors import rank_clips, tag_match
-from reminisce.vss_search import VssHit, VssSearchError, parse_search_payload
+from reminisce.vss_search import (
+    SearchFilters,
+    VssHit,
+    VssSearchError,
+    parse_moments,
+    parse_query,
+    parse_search_payload,
+    parse_summary,
+)
 
 
 class ScriptedModel:
@@ -224,18 +242,33 @@ class ReminisceTests(unittest.TestCase):
         self.assertIn("Source: clip_001", answer.text)
         self.assertTrue(answer.grounded)
 
-    def test_archive_hit_is_used_even_when_the_journal_has_clips(self) -> None:
+    def test_matching_journal_clip_beats_an_archive_street_scene(self) -> None:
         lunch = _clip("clip_001", "Soup at the kitchen table", ["lunch"], [1.0, 0.0])
 
         def searcher(_query: str):
-            return [
-                VssHit(
-                    citation_id="seg-77",
-                    description="A forklift near a dock",
-                    similarity=0.55,
-                    source="s3://example/dock.mp4",
-                )
-            ]
+            return [VssHit("seg-1", "A car is driving on the road.", 0.55, source="s3://example/a.mp4")]
+
+        answer = answer_question(
+            "did I have lunch today?",
+            [lunch],
+            [1.0, 0.0],
+            role="owner",
+            owner_id="user_123",
+            carer_id="carer_daughter",
+            llm=ScriptedModel("clip_001"),
+            searcher=searcher,
+            fetch=lambda _source: None,
+        )
+        self.assertEqual(answer.retrieval_path, "journal")
+        self.assertEqual(answer.citations, ["clip_001"])
+        self.assertNotIn("car is driving", answer.text)
+        self.assertTrue(answer.grounded)
+
+    def test_archive_hit_answers_when_the_journal_has_nothing(self) -> None:
+        lunch = _clip("clip_001", "Soup at the kitchen table", ["lunch"], [0.0, 1.0])
+
+        def searcher(_query: str):
+            return [VssHit("seg-77", "A forklift near a dock", 0.55, source="s3://example/dock.mp4")]
 
         answer = answer_question(
             "was there a forklift?",
@@ -254,11 +287,29 @@ class ReminisceTests(unittest.TestCase):
         self.assertNotIn("Soup", answer.text)
         self.assertTrue(answer.grounded)
 
+    def test_weak_archive_hit_is_not_served_as_a_memory(self) -> None:
+        def searcher(_query: str):
+            return [VssHit("seg-1", "The scene is a daytime view from a vehicle.", 0.19, source="s3://example/a.mp4")]
+
+        answer = answer_question(
+            "did I have lunch today?",
+            [],
+            [],
+            role="owner",
+            owner_id="user_123",
+            carer_id="carer_daughter",
+            llm=ScriptedModel("hit_1"),
+            searcher=searcher,
+            fetch=lambda _source: None,
+        )
+        self.assertEqual(answer.text, ABSTAIN)
+        self.assertEqual(answer.citations, [])
+
     def test_model_picks_a_search_hit_by_its_short_label(self) -> None:
         def searcher(_query: str):
             return [
-                VssHit("seg-1", "A car is driving on the road.", 0.20, source="s3://example/a.mp4"),
-                VssHit("seg-2", "A person is walking a small white dog.", 0.18, source="s3://example/b.mp4"),
+                VssHit("seg-1", "A car is driving on the road.", 0.45, source="s3://example/a.mp4"),
+                VssHit("seg-2", "A person is walking a small white dog.", 0.40, source="s3://example/b.mp4"),
             ]
 
         answer = answer_question(
@@ -280,7 +331,7 @@ class ReminisceTests(unittest.TestCase):
 
     def test_invented_label_falls_back_to_the_top_search_hit(self) -> None:
         def searcher(_query: str):
-            return [VssHit("seg-1", "A car is driving on the road.", 0.20, source="s3://example/a.mp4")]
+            return [VssHit("seg-1", "A car is driving on the road.", 0.40, source="s3://example/a.mp4")]
 
         answer = answer_question(
             "did I fly a plane?",
@@ -367,6 +418,73 @@ class ReminisceTests(unittest.TestCase):
         self.assertEqual(answer.text, ABSTAIN)
         self.assertEqual(answer.citations, [])
         self.assertEqual(answer.retrieval_path, "journal")
+
+    def test_query_lifts_out_time_and_place(self) -> None:
+        options = {"location": ["new_york", "san_francisco", "toronto"]}
+        words, filters = parse_query("a person walking a dog in New York this week", options)
+        self.assertEqual(words, "a person walking a dog")
+        self.assertEqual(filters.time_window, "7d")
+        self.assertEqual(filters.metadata, {"location": "new_york"})
+        words, filters = parse_query("traffic light", options)
+        self.assertEqual(words, "traffic light")
+        self.assertFalse(filters.active())
+        words, filters = parse_query("in the last hour", options)
+        self.assertEqual(words, "in the last hour")
+        self.assertEqual(filters.time_window, "1h")
+
+    def test_filters_build_the_search_request(self) -> None:
+        self.assertEqual(SearchFilters().request_fields(), {})
+        fields = SearchFilters("24h", {"camera_id": "pie_cam-3", "location": "", "bogus": "x"}).request_fields()
+        self.assertEqual(fields, {"time_filter": "24h", "metadata_filters": {"camera_id": "pie_cam-3"}})
+        month = SearchFilters("30d").request_fields(now=datetime(2026, 10, 17, 12, 0, 0))
+        self.assertEqual(month["time_filter"], "custom")
+        self.assertEqual(month["custom_start_date"], "2026-09-17T12:00:00")
+        self.assertEqual(month["custom_end_date"], "2026-10-17T12:00:00")
+
+    def test_moments_and_summary_come_from_the_response(self) -> None:
+        payload = {
+            "chunk_results": [
+                {
+                    "preview_source": "s3://bucket/segments/cam_chunk_0020_segment_006_of_006.mp4",
+                    "original_video": "s3://bucket/cam_chunk_0020.mp4",
+                    "reasoning_content": "A car is driving on the road.",
+                    "similarity_score": 0.29,
+                    "best_match_start_sec": 25.0,
+                    "best_match_end_sec": 30.0,
+                    "matched_segment_count": 3,
+                    "location": "new_york",
+                    "camera_id": "nyc_streets_cam-1",
+                },
+                {"preview_source": "", "reasoning_content": "no source"},
+            ],
+            "llm_synthesis": {"response": "Cars drive past.", "model": "cosmos"},
+        }
+        moments = parse_moments(payload)
+        self.assertEqual(len(moments), 1)
+        self.assertEqual(moments[0].citation_id, "cam_chunk_0020_segment_006_of_006.mp4")
+        self.assertEqual((moments[0].start_sec, moments[0].end_sec), (25.0, 30.0))
+        self.assertEqual(moments[0].place, "new york")
+        self.assertEqual(moments[0].matched_segments, 3)
+        self.assertEqual(parse_summary(payload), ("Cars drive past.", "cosmos"))
+        self.assertEqual(parse_summary({"llm_synthesis": {"response": "x", "error": "timeout"}}), ("", ""))
+
+    def test_journal_search_keeps_matches_inside_the_window(self) -> None:
+        now = datetime(2026, 10, 17, 18, 0, tzinfo=timezone.utc)
+        lunch = _clip("clip_001", "Soup at the kitchen table", ["lunch"], [1.0, 0.0])
+        lunch.recorded_at = "2026-10-17T12:30:00+00:00"
+        old_walk = _clip("clip_003", "A walk outside", ["walk"], [0.0, 1.0])
+        old_walk.recorded_at = "2026-10-01T09:00:00+00:00"
+        self.assertEqual([clip.clip_id for clip in clips_since([lunch, old_walk], "24h", now)], ["clip_001"])
+        self.assertEqual(len(clips_since([lunch, old_walk], "all", now)), 2)
+        found = find_clips("soup", [lunch, old_walk], [1.0, 0.0], owner_id="user_123")
+        self.assertEqual([hit.clip.clip_id for hit in found], ["clip_001"])
+        self.assertEqual(find_clips("soup", [lunch], [1.0, 0.0], owner_id="someone_else"), [])
+        walking = find_clips("a person walking a dog", [lunch, old_walk], [0.0, 0.0], owner_id="user_123")
+        self.assertEqual([hit.clip.clip_id for hit in walking], ["clip_003"])
+
+    def test_journal_search_ignores_a_clip_that_is_close_to_every_query(self) -> None:
+        visit = _clip("clip_002", "My daughter visits with flowers", ["visit", "daughter"], [1.0, 0.0])
+        self.assertEqual(find_clips("a forklift", [visit], [1.0, 0.0], owner_id="user_123"), [])
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
 from reminisce.models import ChatModel, ModelError, remember_llm
 from reminisce.store import Clip, human_when
@@ -17,6 +18,8 @@ from reminisce.vss_search import (
 
 ALIAS_RE = re.compile(r"hit_(\d+)")
 MAX_VSS_HITS = 5
+# The shared archive is public camera footage, so a weak hit is a stranger's street, not her day.
+ARCHIVE_MIN_SIMILARITY = 0.3
 
 PROMPTS = {
     "strict": (
@@ -63,6 +66,63 @@ def clips_for_viewer(clips: list[Clip], *, role: str, owner_id: str, carer_id: s
 
 def search_day(query: str, clips: list[Clip], query_vector: list[float]) -> list[Hit]:
     return select_hits(rank_clips(query, clips, query_vector))
+
+
+WINDOW_SPANS = {"1h": timedelta(hours=1), "24h": timedelta(days=1), "7d": timedelta(days=7), "30d": timedelta(days=30)}
+
+
+def clips_since(clips: list[Clip], window: str, now: datetime | None = None) -> list[Clip]:
+    """Clips recorded inside a search time window. "all" or an unknown window keeps every clip."""
+    span = WINDOW_SPANS.get(window)
+    if span is None:
+        return list(clips)
+    cutoff = (now or datetime.now().astimezone()) - span
+    kept = []
+    for clip in clips:
+        try:
+            moment = datetime.fromisoformat(clip.recorded_at)
+        except ValueError:
+            continue
+        if moment.tzinfo is None:
+            moment = moment.astimezone()
+        if moment >= cutoff:
+            kept.append(clip)
+    return kept
+
+
+STOPWORDS = frozenset(
+    "a an and are at did do does for from had has have i in is it me my of on or the this to was were what "
+    "when where which who with you your today".split()
+)
+WORD_RE = re.compile(r"[a-z0-9]+")
+
+
+def _content_words(text: str) -> set[str]:
+    return {word for word in WORD_RE.findall((text or "").lower()) if len(word) >= 3 and word not in STOPWORDS}
+
+
+def words_match(query: str, clip: Clip) -> bool:
+    """A search word shares a stem with a tag or a description word ("walking" finds "walk")."""
+    wanted = _content_words(query)
+    have = _content_words(" ".join(clip.activity_tags) + " " + clip.cosmos_description)
+    for word in wanted:
+        for other in have:
+            if word == other or (min(len(word), len(other)) >= 4 and (word.startswith(other) or other.startswith(word))):
+                return True
+    return False
+
+
+def find_clips(query: str, clips: list[Clip], query_vector: list[float], *, owner_id: str, limit: int = 4) -> list[Hit]:
+    """Owned clips whose tags or description share a word with the search, best first.
+
+    Cosine only orders the matches. Some title-card embeddings sit close to every
+    query, so a clip with no shared word is never shown on the strength of cosine alone.
+    """
+    owned = clips_for_viewer(clips, role="owner", owner_id=owner_id, carer_id="")
+    ranked = rank_clips(query, owned, query_vector)
+    matched = [hit for hit in ranked if hit.tag_match or words_match(query, hit.clip)]
+    matched.sort(key=lambda hit: (hit.tag_match, hit.cosine), reverse=True)
+    return matched[:limit]
 
 
 def get_clip(clips: list[Clip], clip_id: str) -> Clip | None:
@@ -152,11 +212,12 @@ def answer_question(
     searcher=None,
     fetch=None,
 ) -> Answer:
-    """Answer from the indexed video archive when search returns hits, else from the journal.
+    """Answer from the journal, using the video archive only when it adds something real.
 
-    Only the owner searches the archive. A carer searches clips that were sent to them.
-    `searcher` is omitted by the eval and the unit tests that rank the journal
-    directly. The Ask page passes the live search client.
+    Order: an archive hit that names a journal clip, then the journal rank, then an
+    archive-only hit at or above ARCHIVE_MIN_SIMILARITY. Only the owner searches the
+    archive. A carer searches clips that were sent to them. `searcher` is omitted by
+    the eval and the unit tests that rank the journal directly.
     """
     visible = clips_for_viewer(clips, role=role, owner_id=owner_id, carer_id=carer_id)
     corpus_ids = {clip.clip_id for clip in visible}
@@ -174,25 +235,31 @@ def answer_question(
             retrieval_note = str(exc)
 
     matched = match_journal_hits(vss_items, visible) if vss_items else []
-    outside = external_clips(vss_items, owner_id=owner_id) if vss_items else []
+    strong = [item for item in vss_items if float(item.similarity or 0.0) >= ARCHIVE_MIN_SIMILARITY]
+    outside = external_clips(strong, owner_id=owner_id) if strong else []
     sources = {item.citation_id: item.source or item.preview_source for item in vss_items}
     similarity = {item.citation_id: float(item.similarity or 0.0) for item in vss_items}
 
-    if matched or outside:
-        retrieval_path = "vss"
-        ranked = [
+    def _vss_ranked(include_outside: bool) -> list[Hit]:
+        found = [
             Hit(clip=clip, cosine=float(item.similarity or 0.0), tag_match=False, combined=float(item.similarity or 0.0))
             for item, clip in matched
         ]
-        for clip in outside:
-            score = similarity.get(clip.clip_id, 0.0)
-            ranked.append(Hit(clip=clip, cosine=score, tag_match=False, combined=score))
-        ranked = ranked[:MAX_VSS_HITS]
-        hits = ranked
+        if include_outside:
+            for clip in outside:
+                score = similarity.get(clip.clip_id, 0.0)
+                found.append(Hit(clip=clip, cosine=score, tag_match=False, combined=score))
+        return found[:MAX_VSS_HITS]
+
+    if matched:
+        retrieval_path = "vss"
+        ranked = hits = _vss_ranked(include_outside=False)
     else:
         tools.append("search_day")
-        retrieval_path = "journal"
         ranked, hits = _journal_hits(question, visible, query_vector)
+        if not hits and outside:
+            retrieval_path = "vss"
+            ranked = hits = _vss_ranked(include_outside=True)
 
     system = PROMPTS.get(prompt_version, PROMPTS["warm"])
     raw = ""

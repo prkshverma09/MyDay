@@ -15,11 +15,11 @@ The ten practice clips are synthetic title cards generated on the machine that b
 - Ask a question in a text box, or upload a short voice question (Canary transcribes it when the speech model is up). Ask is connected to CoreWeave / W&B serverless inference at `https://api.inference.wandb.ai/v1`. The model is `meta-llama/Llama-3.1-8B-Instruct` unless `REMINISCE_LLM_MODEL` is set. The page shows `Connected to` that model when the reply came from it.
 - Read a grounded answer that quotes the Cosmos description and names the `clip_id` (`Source: clip_id`).
 - Play the clip the answer came from.
+- Under the answer, see search results: other saved clips that match, then the shared camera archive grouped by video, each with the time of the best moment, the place, the camera, the match score, and **Play**. Phrases like `in new york` or `this week` become filters. **Filters** also offers time, place, camera, kind, and object. **Show more** fetches up to 50 results.
 - Send one clip to a carer, or take it back.
-- On **Carer**, turn on an optional daily note. That note contains only clips already sent.
 - Play a short story of three to five clips. The sentences are the clip descriptions, in time order.
 
-A carer page searches only clips that were sent. Unshared clips are not in that search. **Eval** is a small button at the top of the page, not a tab in the main row.
+The main row has three tabs: **My day**, **Ask**, and **Story**. **Eval** is a small button at the top of the page. The carer view in `frontend/views/carer.py` is not in the main row.
 
 ## What this build does not do
 
@@ -27,11 +27,21 @@ No passive camera. No facial recognition. No medical advice. No safety-alarm fra
 
 ## How an answer stays tied to a real clip
 
-1. Ask logs in to the video search API and calls `POST /api/v1/search` with the question, `top_k` 3, and `min_similarity` 0.3. The JWT stays in memory. A hit that names a journal `clip_id` is played from that clip. If the search returns nothing that matches the journal, Ask falls back to the local cosine rank (`search_day`): Cosmos Embed1 plus activity tags. Practice clips live in VastDB schema `reminisce`, table `clips`, so this fallback is the usual path for them. The trace field `retrieval_path` is `vss` or `journal`.
+1. Ask logs in to the video search API and calls `POST /api/v1/search` with the question, `top_k` 5, and `min_similarity` 0.15. The JWT stays in memory. A hit that names a journal `clip_id` is played from that clip. Otherwise Ask uses the local cosine rank (`search_day`): Cosmos Embed1 plus activity tags. Practice clips live in VastDB schema `reminisce`, table `clips`, so this is the usual path for them. Only when the journal has no match does Ask use an archive-only hit, and only at similarity 0.3 or above. The shared archive is public street and warehouse footage, so a weaker hit would show a stranger's street as her memory. The trace field `retrieval_path` is `vss` or `journal`.
 2. The W&B model may only pick ids from that short list. Two prompts are compared in the eval: `strict` and `warm`. The app uses `warm`. The eval script still ranks the journal directly so those counts stay about the embeddings.
 3. The sentence on screen is the description plus `Source:` and the id. That id is the journal `clip_id` when the hit matches one, otherwise the segment or source id returned by search. The model's free text is kept in the trace and the eval file. It is not shown as the memory.
 4. If the model names an id that was not retrieved, that id is dropped. If it names nothing usable, the top retrieved clip is cited instead. If nothing was retrieved, the answer is "I couldn't find that moment in your day." and it cites nothing.
 5. `get_clip` loads the row again before the sentence is built. `daily_digest` includes only clips whose `shared_with` contains the carer.
+
+## How search on Ask works
+
+Ask makes one archive search call. Its hits feed the grounded answer above and the result list below, and the result list skips anything the answer already shows.
+
+1. `parse_query` lifts a time phrase (`last hour`, `today`, `this week`, `this month`) and a place name from `/api/v1/metadata/schema` out of the words. Cameras, kinds, and objects come only from **Filters**, because words like `traffic` or `person` are usually what is being searched for.
+2. Saved clips: `find_clips` keeps a clip only when a search word shares a stem with its tags or Cosmos description, then orders by Embed1 cosine. Some title-card embeddings sit near every query, so cosine alone never admits a clip. The time window applies. Place, camera, kind, and object filters do not, because journal clips have none.
+3. Camera archive: `POST /api/v1/search` with `time_filter` (or a `custom` 30-day range) and `metadata_filters`. The page shows `chunk_results`: one card per video, pointed at its best segment. **Play** downloads that segment through `/api/v1/videos/stream` on the server, so the JWT never reaches the browser.
+4. `llm_synthesis` is shown only inside **What the search model says**, labelled as model text. It is never used as a memory.
+5. Every search writes a `search` row to `data/journal/traces.jsonl` with the words, filters, ids shown, and latency.
 
 ## Architecture
 
@@ -54,7 +64,7 @@ flowchart LR
 | Understanding | Cosmos Reason describes one frame from the clip. |
 | Index | A 256-number Embed1 vector of that description, stored on the clip row in VastDB schema `reminisce`, table `clips`. |
 | Agent | Video search first, then the local journal rank. W&B serverless inference selects ids from that list. The tools are `vss_search`, `search_day`, `get_clip`, and `daily_digest`. |
-| UI | Streamlit, under `frontend/`. 2×2 thumbnail gallery, ask, story, carer share, eval. |
+| UI | Streamlit, under `frontend/`. 2×2 thumbnail gallery, ask, search, story, carer share, eval. |
 | Observability | `data/journal/traces.jsonl` for every ask, story, and digest. `scripts/run_eval.py` writes `data/journal/eval_latest.json` and a W&B table. |
 
 Ask posts to `https://api.inference.wandb.ai/v1`. The chat model defaults to `meta-llama/Llama-3.1-8B-Instruct`. Override it with `REMINISCE_LLM_MODEL`. Cosmos Reason, Cosmos Embed1, and Canary are reached through `COSMOS3_REASON_URL`, `COSMOS_EMBED1_URL`, and `CANARY_1B_URL`. The model id for Cosmos and Embed is read from each server's `/v1/models`.
@@ -90,7 +100,7 @@ VastDB keeps every write. The newest `inserted_at` for a `clip_id` is the curren
 ```text
 frontend/app.py            Streamlit entry
 frontend/style.py          Blank Street palette
-frontend/views/            My day, Ask, Story, Carer, Eval
+frontend/views/            My day, Ask (with search results), Story, Eval
 app.py                     Same entry, for the previous command
 reminisce/catalog.py       Ten questions and the practice-clip labels
 reminisce/media.py         ffmpeg: title cards, frames, upload, camera
@@ -98,8 +108,8 @@ reminisce/models.py        Cosmos, Embed1, Canary, W&B chat
 reminisce/ingest.py        One clip in, one row out
 reminisce/vast_index.py    reminisce.clips in this team's bucket
 reminisce/vectors.py       Cosine rank and tag fallback
-reminisce/vss_search.py    Login and POST /api/v1/search
-reminisce/agent.py         vss_search, search_day, get_clip, daily_digest, story
+reminisce/vss_search.py    Login, filters, POST /api/v1/search, segment download
+reminisce/agent.py         vss_search, search_day, find_clips, get_clip, daily_digest, story
 reminisce/evaluate.py      Ten-question comparison of two prompts
 scripts/check_stack.py     Probe the services, print no secrets
 scripts/make_sample_clips.py
@@ -219,7 +229,7 @@ The same numbers are on the Eval page. W&B receives a table named `results` and 
 
 1. **My day.** Show lunch, the walk, and the visit in the 2×2 gallery. Say that these practice clips stand in for a consented recording, and that unshared clips stay here.
 2. **Ask.** Type `did I have lunch today?` and play the clip under the answer. Point at `Source: clip_001` and the connected model line.
-3. **Send** on the walk clip. Open **Carer** and show that only the walk is there. Ask `when did I last go for a walk?` on that page.
+3. **Search.** Ask `a person walking a dog in new york`. The answer says it is not in her day, and the camera archive below shows New York videos. Play one.
 4. **Eval.** Show hybrid retrieval, grounded answers, and the W&B line.
 5. Close on control: she shares what she wants, when she wants.
 

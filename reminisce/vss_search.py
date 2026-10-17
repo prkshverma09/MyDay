@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import hashlib
 import os
-from dataclasses import dataclass
+import re
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -22,6 +25,12 @@ TOP_K = 5
 MIN_SIMILARITY = 0.15
 SEGMENT_CACHE = CLIPS_DIR / "vss"
 MAX_SEGMENT_BYTES = 40 * 1024 * 1024
+FILTER_FIELDS = ("location", "camera_id", "capture_type", "object_classes")
+TIME_WINDOWS = ("all", "1h", "24h", "7d", "30d")
+SCHEMA_TTL_S = 600
+
+_SCHEMA: dict[str, list[str]] = {}
+_SCHEMA_AT = 0.0
 
 
 class VssSearchError(RuntimeError):
@@ -38,6 +47,59 @@ class VssHit:
     preview_source: str = ""
     recorded_at: str = ""
     place: str = ""
+
+
+@dataclass
+class VssMoment:
+    """One parent video, pointed at the segment that matched best."""
+
+    citation_id: str
+    description: str
+    similarity: float
+    source: str
+    original_video: str = ""
+    start_sec: float = 0.0
+    end_sec: float = 0.0
+    matched_segments: int = 0
+    recorded_at: str = ""
+    place: str = ""
+    camera: str = ""
+
+
+@dataclass
+class SearchFilters:
+    time_window: str = "all"
+    metadata: dict[str, str] = field(default_factory=dict)
+
+    def request_fields(self, now: datetime | None = None) -> dict:
+        fields: dict = {}
+        metadata = {key: value for key, value in self.metadata.items() if key in FILTER_FIELDS and value}
+        if metadata:
+            fields["metadata_filters"] = metadata
+        window = self.time_window if self.time_window in TIME_WINDOWS else "all"
+        if window == "30d":
+            end = now or datetime.now()
+            fields["time_filter"] = "custom"
+            fields["custom_start_date"] = (end - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%S")
+            fields["custom_end_date"] = end.strftime("%Y-%m-%dT%H:%M:%S")
+        elif window != "all":
+            fields["time_filter"] = window
+        return fields
+
+    def active(self) -> bool:
+        return self.time_window != "all" or any(self.metadata.values())
+
+
+@dataclass
+class SearchResult:
+    query: str
+    filters: SearchFilters
+    hits: list[VssHit]
+    moments: list[VssMoment]
+    summary: str = ""
+    summary_model: str = ""
+    total: int = 0
+    search_ms: float = 0.0
 
 
 def cached_token() -> str:
@@ -226,24 +288,147 @@ def parse_search_payload(payload: dict) -> list[VssHit]:
     return hits
 
 
-def search_archive(query: str, *, top_k: int = TOP_K, min_similarity: float = MIN_SIMILARITY) -> list[VssHit]:
+def _number(value) -> float:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return 0.0
+
+
+def parse_moments(payload: dict) -> list[VssMoment]:
+    """`chunk_results`: one entry per parent video, with its best-matching segment."""
+    rows = payload.get("chunk_results") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        return []
+    moments: list[VssMoment] = []
+    seen: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        source = _text(row.get("preview_source"))
+        description = _description(row)
+        if not source or not description:
+            continue
+        citation = _clip_id_in(source) or source.rstrip("/").split("/")[-1][:200]
+        if not citation or citation in seen:
+            continue
+        seen.add(citation)
+        moments.append(
+            VssMoment(
+                citation_id=citation,
+                description=description,
+                similarity=_similarity(row),
+                source=source,
+                original_video=_text(row.get("original_video")),
+                start_sec=_number(row.get("best_match_start_sec")),
+                end_sec=_number(row.get("best_match_end_sec")),
+                matched_segments=int(_number(row.get("matched_segment_count"))),
+                recorded_at=_text(row.get("upload_timestamp")),
+                place=_text(row.get("location")).replace("_", " "),
+                camera=_text(row.get("camera_id")),
+            )
+        )
+    return moments
+
+
+def parse_summary(payload: dict) -> tuple[str, str]:
+    """The search model's synthesis text and model name, or empty strings."""
+    block = payload.get("llm_synthesis") if isinstance(payload, dict) else None
+    if not isinstance(block, dict) or block.get("error"):
+        return "", ""
+    return _text(block.get("response"))[:4000], _text(block.get("model"))
+
+
+def search(
+    query: str,
+    filters: SearchFilters | None = None,
+    *,
+    top_k: int = TOP_K,
+    min_similarity: float = MIN_SIMILARITY,
+) -> SearchResult:
     """Natural-language search. Raises VssSearchError with a status-only message."""
-    response = _authorized(
-        "POST",
-        "/api/v1/search",
-        json_body={
-            "query": query,
-            "top_k": top_k,
-            "min_similarity": min_similarity,
-        },
-    )
+    filters = filters or SearchFilters()
+    body = {"query": query, "top_k": top_k, "min_similarity": min_similarity}
+    body.update(filters.request_fields())
+    response = _authorized("POST", "/api/v1/search", json_body=body)
     if response.status_code >= 400:
         raise VssSearchError(f"search HTTP {response.status_code}")
     try:
         payload = response.json()
     except ValueError:
         raise VssSearchError("search unavailable") from None
-    return parse_search_payload(payload if isinstance(payload, dict) else {})
+    if not isinstance(payload, dict):
+        payload = {}
+    summary, model = parse_summary(payload)
+    hits = parse_search_payload(payload)
+    return SearchResult(
+        query=query,
+        filters=filters,
+        hits=hits,
+        moments=parse_moments(payload),
+        summary=summary,
+        summary_model=model,
+        total=int(_number(payload.get("total"))) or len(hits),
+        search_ms=_number(payload.get("search_time_ms")),
+    )
+
+
+def search_archive(query: str, *, top_k: int = TOP_K, min_similarity: float = MIN_SIMILARITY) -> list[VssHit]:
+    return search(query, top_k=top_k, min_similarity=min_similarity).hits
+
+
+def metadata_options(*, refresh: bool = False) -> dict[str, list[str]]:
+    """Filterable fields and their values from /metadata/schema. Empty when search is down."""
+    global _SCHEMA, _SCHEMA_AT
+    if _SCHEMA and not refresh and time.monotonic() - _SCHEMA_AT < SCHEMA_TTL_S:
+        return _SCHEMA
+    try:
+        response = _authorized("GET", "/api/v1/metadata/schema")
+        payload = response.json() if response.status_code < 400 else {}
+    except (VssSearchError, ValueError):
+        return _SCHEMA
+    options: dict[str, list[str]] = {}
+    for column in payload.get("schema", []) if isinstance(payload, dict) else []:
+        if not isinstance(column, dict) or column.get("name") not in FILTER_FIELDS:
+            continue
+        values = [str(value) for value in column.get("options") or [] if isinstance(value, (str, int))]
+        if values:
+            options[column["name"]] = sorted(values)
+    _SCHEMA, _SCHEMA_AT = options, time.monotonic()
+    return options
+
+
+_TIME_PHRASES = (
+    (re.compile(r"\b(?:in\s+the\s+)?(?:last|past)\s+hour\b", re.I), "1h"),
+    (re.compile(r"\b(?:today|(?:in\s+the\s+)?(?:last|past)\s+(?:day|24\s+hours))\b", re.I), "24h"),
+    (re.compile(r"\b(?:this\s+week|(?:in\s+the\s+)?(?:last|past)\s+(?:week|7\s+days))\b", re.I), "7d"),
+    (re.compile(r"\b(?:this\s+month|(?:in\s+the\s+)?(?:last|past)\s+(?:month|30\s+days))\b", re.I), "30d"),
+)
+
+
+def parse_query(text: str, options: dict[str, list[str]] | None = None) -> tuple[str, SearchFilters]:
+    """Split "a dog in new york this week" into the query words plus a time window and place.
+
+    Only time phrases and place names are lifted out. Cameras, capture types, and
+    objects are chosen explicitly, because words like "traffic" or "person" are
+    usually part of what is being searched for.
+    """
+    remaining = text or ""
+    filters = SearchFilters()
+    for pattern, window in _TIME_PHRASES:
+        if pattern.search(remaining):
+            filters.time_window = window
+            remaining = pattern.sub(" ", remaining)
+            break
+    places = sorted((options or {}).get("location", []), key=len, reverse=True)
+    for place in places:
+        words = r"\s+".join(re.escape(part) for part in place.replace("_", " ").split())
+        pattern = re.compile(rf"\b(?:(?:in|at|from|near|around)\s+(?:the\s+)?)?{words}\b", re.I)
+        if pattern.search(remaining):
+            filters.metadata["location"] = place
+            remaining = pattern.sub(" ", remaining)
+            break
+    cleaned = " ".join(remaining.split()).strip(" ,.?!")
+    return (cleaned or " ".join((text or "").split())), filters
 
 
 def fetch_segment(source: str) -> Path | None:

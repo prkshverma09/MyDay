@@ -13,7 +13,6 @@ import streamlit as st
 
 from frontend.style import CSS
 from frontend.views.ask import _page_ask
-from frontend.views.carer import _page_carer
 from frontend.views.common import _flash, _nav, _prefs
 from frontend.views.day import _page_day
 from frontend.views.eval import _page_eval
@@ -26,16 +25,14 @@ def main() -> None:
     prefs = _prefs()
     page = _nav()
     _flash()
-    if page == "My day":
-        _page_day(prefs)
-    elif page == "Ask":
+    if page == "Ask":
         _page_ask(prefs)
     elif page == "Story":
         _page_story(prefs)
-    elif page == "Carer":
-        _page_carer(prefs)
-    else:
+    elif page == "Eval":
         _page_eval()
+    else:
+        _page_day(prefs)
 
 
 main()
