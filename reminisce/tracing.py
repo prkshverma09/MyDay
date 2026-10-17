@@ -85,6 +85,8 @@ def trace_from_answer(kind: str, question: str, answer, latency_s: float) -> Non
             "served": answer.text,
             "citations": answer.citations,
             "grounded": answer.grounded,
+            "retrieval_path": getattr(answer, "retrieval_path", ""),
+            "retrieval_note": getattr(answer, "retrieval_note", ""),
             "latency_s": round(latency_s, 3),
             "retrieved": [
                 {

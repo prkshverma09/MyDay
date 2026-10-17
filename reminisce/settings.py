@@ -87,15 +87,27 @@ def load_settings() -> Settings:
 
 def redact(text: str) -> str:
     """Remove credential material from an error string before it is stored or printed."""
-    cleaned = text
+    import re
+
+    cleaned = text or ""
     settings = load_settings()
-    for secret in (
+    secrets = [
         settings.access_key,
         settings.secret_key,
         settings.gpu_bearer_token,
         settings.wandb_api_key,
         settings.s3_endpoint,
-    ):
+        os.environ.get("PASSWORD", ""),
+        os.environ.get("INGRESS_URL", ""),
+    ]
+    try:
+        from reminisce.vss_search import cached_token
+
+        secrets.append(cached_token())
+    except Exception:
+        pass
+    for secret in secrets:
         if secret:
             cleaned = cleaned.replace(secret, "[redacted]")
+    cleaned = re.sub(r"Bearer\s+\S+", "Bearer [redacted]", cleaned, flags=re.IGNORECASE)
     return cleaned[:500]

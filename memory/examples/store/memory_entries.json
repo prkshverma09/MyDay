@@ -1,0 +1,117 @@
+[
+  {
+    "clip_id": "door-0905",
+    "t_start": "2026-10-17T09:05:00",
+    "t_end": "2026-10-17T09:05:30",
+    "place": "front door",
+    "people": [
+      "Sarah"
+    ],
+    "action": "visited and talked about an appointment",
+    "objects": [],
+    "statement": "Sarah was at the front door and mentioned the dentist on Thursday at 10.",
+    "transcript": "Don't forget the dentist on Thursday at 10.",
+    "answers": [
+      {
+        "text": "Sarah was at the front door.",
+        "clip_id": "door-0905",
+        "t_start": "2026-10-17T09:05:00",
+        "confidence": 0.9,
+        "abstain": false,
+        "question_id": "people"
+      },
+      {
+        "text": "Dentist on Thursday at 10.",
+        "clip_id": "door-0905",
+        "t_start": "2026-10-17T09:05:00",
+        "confidence": 0.85,
+        "abstain": false,
+        "question_id": "appointment"
+      }
+    ],
+    "importance": "high",
+    "camera": "door",
+    "file": "door_0001.mp4",
+    "object_details": {}
+  },
+  {
+    "clip_id": "kitchen-0912",
+    "t_start": "2026-10-17T09:12:00",
+    "t_end": "2026-10-17T09:12:20",
+    "place": "kitchen",
+    "people": [],
+    "action": "put the keys down",
+    "objects": [
+      "keys"
+    ],
+    "statement": "The keys are in the blue bowl.",
+    "transcript": "",
+    "answers": [
+      {
+        "text": "The keys are in the blue bowl.",
+        "clip_id": "kitchen-0912",
+        "t_start": "2026-10-17T09:12:00",
+        "confidence": 0.9,
+        "abstain": false,
+        "question_id": "lost_objects"
+      }
+    ],
+    "importance": "high",
+    "camera": "kitchen",
+    "file": "kitchen_0004.mp4",
+    "object_details": {
+      "keys": {
+        "prep": "in",
+        "where": "blue bowl"
+      }
+    }
+  },
+  {
+    "clip_id": "living-0940",
+    "t_start": "2026-10-17T09:40:00",
+    "t_end": "2026-10-17T09:40:20",
+    "place": "living room",
+    "people": [],
+    "action": "was recorded",
+    "objects": [
+      "cat"
+    ],
+    "statement": "The cat is on the sofa.",
+    "transcript": "",
+    "answers": [],
+    "importance": "normal",
+    "camera": "living",
+    "file": "living_0002.mp4",
+    "object_details": {
+      "cat": {
+        "prep": "on",
+        "where": "sofa"
+      }
+    }
+  },
+  {
+    "clip_id": "kitchen-1102",
+    "t_start": "2026-10-17T11:02:00",
+    "t_end": "2026-10-17T11:02:15",
+    "place": "kitchen",
+    "people": [],
+    "action": "left the stove on",
+    "objects": [],
+    "statement": "The stove is on in the kitchen.",
+    "transcript": "",
+    "answers": [
+      {
+        "text": "The stove is on in the kitchen.",
+        "clip_id": "kitchen-1102",
+        "t_start": "2026-10-17T11:02:00",
+        "confidence": 0.85,
+        "abstain": false,
+        "question_id": "stove"
+      }
+    ],
+    "importance": "high",
+    "camera": "kitchen",
+    "file": "kitchen_0018.mp4",
+    "object_details": {}
+  }
+]

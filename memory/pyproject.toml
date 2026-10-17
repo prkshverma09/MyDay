@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "myday-memory"
+version = "0.1.0"
+description = "Turn clip captions and transcripts into memory entries, last-seen rows, and coverage."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+vastdb = ["vastdb", "pyarrow"]
+
+[project.scripts]
+myday-memory = "myday_memory.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

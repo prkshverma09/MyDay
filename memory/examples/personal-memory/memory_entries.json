@@ -1,0 +1,298 @@
+[
+  {
+    "clip_id": "tea-0802",
+    "t_start": "2026-10-17T08:02:00",
+    "t_end": "2026-10-17T08:02:15",
+    "place": "kitchen",
+    "people": [],
+    "action": "was recorded",
+    "objects": [
+      "mug"
+    ],
+    "statement": "You made tea in the kitchen at 08:02.",
+    "transcript": "",
+    "answers": [],
+    "importance": "normal",
+    "camera": "pov",
+    "file": "tea.mp4",
+    "object_details": {
+      "mug": {
+        "prep": "on",
+        "where": "counter"
+      }
+    },
+    "key_moment": false,
+    "highlights": [],
+    "summary": "You made tea in the kitchen at 08:02."
+  },
+  {
+    "clip_id": "keys-0815",
+    "t_start": "2026-10-17T08:15:00",
+    "t_end": "2026-10-17T08:15:15",
+    "place": "hallway",
+    "people": [],
+    "action": "put the keys down",
+    "objects": [
+      "keys"
+    ],
+    "statement": "You put your keys in the blue bowl in the hallway at 08:15.",
+    "transcript": "",
+    "answers": [
+      {
+        "text": "The keys are in the blue ceramic bowl.",
+        "clip_id": "keys-0815",
+        "t_start": "2026-10-17T08:15:00",
+        "confidence": 0.9,
+        "abstain": false,
+        "question_id": "lost_objects"
+      }
+    ],
+    "importance": "high",
+    "camera": "pov",
+    "file": "keys.mp4",
+    "object_details": {
+      "keys": {
+        "prep": "in",
+        "where": "blue ceramic bowl"
+      }
+    },
+    "key_moment": true,
+    "highlights": [
+      "0:05-0:10. She drops the keys into a blue ceramic bowl on the hallway table."
+    ],
+    "summary": "You put your keys in the blue bowl in the hallway at 08:15."
+  },
+  {
+    "clip_id": "sarah-0905",
+    "t_start": "2026-10-17T09:05:00",
+    "t_end": "2026-10-17T09:05:20",
+    "place": "front door",
+    "people": [
+      "Sarah"
+    ],
+    "action": "visited and talked about an appointment",
+    "objects": [],
+    "statement": "Sarah visited at 09:05.",
+    "transcript": "Morning, Mum. Remember, the dentist is Thursday, 10am. I will drive you.",
+    "answers": [
+      {
+        "text": "Sarah was at the front door.",
+        "clip_id": "sarah-0905",
+        "t_start": "2026-10-17T09:05:00",
+        "confidence": 0.9,
+        "abstain": false,
+        "question_id": "people"
+      },
+      {
+        "text": "Dentist on Thursday, 10am, Sarah driving.",
+        "clip_id": "sarah-0905",
+        "t_start": "2026-10-17T09:05:00",
+        "confidence": 0.85,
+        "abstain": false,
+        "question_id": "appointment"
+      }
+    ],
+    "importance": "high",
+    "camera": "pov",
+    "file": "sarah.mp4",
+    "object_details": {},
+    "key_moment": true,
+    "highlights": [
+      "0:10-0:15. Sarah: Remember, the dentist is Thursday, 10am. I will drive you."
+    ],
+    "summary": "Sarah visited at 09:05."
+  },
+  {
+    "clip_id": "cat-0920",
+    "t_start": "2026-10-17T09:20:00",
+    "t_end": "2026-10-17T09:20:15",
+    "place": "kitchen",
+    "people": [],
+    "action": "was recorded",
+    "objects": [
+      "cat"
+    ],
+    "statement": "You fed Biscuit in the kitchen at 09:20.",
+    "transcript": "There you go, old boy.",
+    "answers": [],
+    "importance": "normal",
+    "camera": "kitchen",
+    "file": "cat.mp4",
+    "object_details": {
+      "cat": {
+        "prep": "in",
+        "where": "kitchen"
+      }
+    },
+    "key_moment": false,
+    "highlights": [],
+    "summary": "You fed Biscuit in the kitchen at 09:20."
+  },
+  {
+    "clip_id": "glasses-1040",
+    "t_start": "2026-10-17T10:40:00",
+    "t_end": "2026-10-17T10:40:15",
+    "place": "kitchen",
+    "people": [],
+    "action": "put the glasses down",
+    "objects": [
+      "glasses"
+    ],
+    "statement": "You left your glasses on the kitchen counter at 10:40.",
+    "transcript": "",
+    "answers": [
+      {
+        "text": "The glasses are on the counter.",
+        "clip_id": "glasses-1040",
+        "t_start": "2026-10-17T10:40:00",
+        "confidence": 0.9,
+        "abstain": false,
+        "question_id": "lost_objects"
+      }
+    ],
+    "importance": "high",
+    "camera": "pov",
+    "file": "glasses.mp4",
+    "object_details": {
+      "glasses": {
+        "prep": "on",
+        "where": "counter"
+      }
+    },
+    "key_moment": true,
+    "highlights": [
+      "0:05-0:10. She takes the glasses off and sets them down on the counter, next to the letter."
+    ],
+    "summary": "You left your glasses on the kitchen counter at 10:40."
+  },
+  {
+    "clip_id": "stove-on-1205",
+    "t_start": "2026-10-17T12:05:00",
+    "t_end": "2026-10-17T12:05:10",
+    "place": "kitchen",
+    "people": [],
+    "action": "left the stove on",
+    "objects": [],
+    "statement": "The stove was left on at 12:05.",
+    "transcript": "",
+    "answers": [
+      {
+        "text": "The stove is on in the kitchen.",
+        "clip_id": "stove-on-1205",
+        "t_start": "2026-10-17T12:05:00",
+        "confidence": 0.85,
+        "abstain": false,
+        "question_id": "stove"
+      }
+    ],
+    "importance": "high",
+    "camera": "pov",
+    "file": "stove.mp4",
+    "object_details": {},
+    "key_moment": true,
+    "highlights": [
+      "0:05-0:10. She leaves the pan on the lit ring. The kitchen is empty."
+    ],
+    "summary": "The stove was left on at 12:05."
+  },
+  {
+    "clip_id": "stove-off-1207",
+    "t_start": "2026-10-17T12:07:00",
+    "t_end": "2026-10-17T12:07:10",
+    "place": "kitchen",
+    "people": [],
+    "action": "turned the stove off",
+    "objects": [],
+    "statement": "You turned the stove off at 12:07 after a reminder.",
+    "transcript": "Oh, thank you.",
+    "answers": [
+      {
+        "text": "The stove is off in the kitchen.",
+        "clip_id": "stove-off-1207",
+        "t_start": "2026-10-17T12:07:00",
+        "confidence": 0.85,
+        "abstain": false,
+        "question_id": "stove"
+      }
+    ],
+    "importance": "high",
+    "camera": "pov",
+    "file": "stove.mp4",
+    "object_details": {},
+    "key_moment": true,
+    "highlights": [
+      "0:15-0:20. Her hand turns the ring off."
+    ],
+    "summary": "You turned the stove off at 12:07 after a reminder."
+  },
+  {
+    "clip_id": "plant-1315",
+    "t_start": "2026-10-17T13:15:00",
+    "t_end": "2026-10-17T13:15:15",
+    "place": "living room",
+    "people": [],
+    "action": "was recorded",
+    "objects": [],
+    "statement": "You watered the spider plant at 13:15.",
+    "transcript": "",
+    "answers": [],
+    "importance": "normal",
+    "camera": "pov",
+    "file": "plant.mp4",
+    "object_details": {},
+    "key_moment": false,
+    "highlights": [],
+    "summary": "You watered the spider plant at 13:15."
+  },
+  {
+    "clip_id": "garden-1545",
+    "t_start": "2026-10-17T15:45:00",
+    "t_end": "2026-10-17T15:45:15",
+    "place": "garden",
+    "people": [],
+    "action": "was recorded",
+    "objects": [],
+    "statement": "You picked tomatoes in the garden at 15:45.",
+    "transcript": "Hello.",
+    "answers": [],
+    "importance": "normal",
+    "camera": "pov",
+    "file": "garden.mp4",
+    "object_details": {},
+    "key_moment": false,
+    "highlights": [],
+    "summary": "You picked tomatoes in the garden at 15:45."
+  },
+  {
+    "clip_id": "evening-1820",
+    "t_start": "2026-10-17T18:20:00",
+    "t_end": "2026-10-17T18:20:15",
+    "place": "living room",
+    "people": [
+      "Sarah"
+    ],
+    "action": "visited",
+    "objects": [],
+    "statement": "Sarah phoned at 18:20.",
+    "transcript": "Sarah calling. Did you have a good day, Mum? Lovely. Sarah came this morning.",
+    "answers": [
+      {
+        "text": "Sarah was in the living room.",
+        "clip_id": "evening-1820",
+        "t_start": "2026-10-17T18:20:00",
+        "confidence": 0.9,
+        "abstain": false,
+        "question_id": "people"
+      }
+    ],
+    "importance": "high",
+    "camera": "pov",
+    "file": "evening.mp4",
+    "object_details": {},
+    "key_moment": true,
+    "highlights": [
+      "0:05-0:10. Her phone lights up: Sarah calling."
+    ],
+    "summary": "Sarah phoned at 18:20."
+  }
+]
