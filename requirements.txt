@@ -1,0 +1,6 @@
+streamlit>=1.39
+requests>=2.31
+pyarrow>=15
+vastdb
+wandb>=0.17
+weave>=0.51

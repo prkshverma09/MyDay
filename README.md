@@ -1,127 +1,244 @@
-# MyDay — Ask Your Day
+# My Day
 
-**A personal episodic memory for elderly people with early memory loss who live alone.**
+Make every day count.
 
-Your day is recorded. You can ask it anything — and every answer comes with the actual moment as proof.
+My Day is a daily memory journal for an older adult living alone, or living with early memory change. They keep short clips of the day. They can ask "did I have lunch today?" and get that clip back, with a short answer that cites the clip. They choose what a carer can see. Nothing is shared until they tap **Send**.
 
-Built by **Team 20** at the Real-Time Video Agents Hack — LDN (17 Oct 2026).
+This is a Streamlit app for the Builders Challenge. It calls NVIDIA Cosmos Reason and Cosmos Embed1, stores clip rows in VastDB schema `reminisce`, table `clips`, and uses CoreWeave / Weights & Biases serverless inference for clip selection. The Streamlit UI is the product.
 
-## The problem
+The ten practice clips are synthetic title cards generated on the machine that builds them. They are not recordings of a real person, and they are not patient data. Upload a clip you have consent to use when you want a real moment in the journal.
 
-Repetitive questioning is one of the earliest and most frequent behaviours in Alzheimer's and early memory loss: *"Has Sarah been today?" "Where are my keys?" "Did I lock the door?"* — asked again and again, driven by genuine anxiety and a need for reassurance. Family carers answer patiently… until they can't. Existing assistants (e.g. smart-glasses companions) focus on prompting what to do **next**. Nobody gives back what **already happened** — with evidence.
+## What a person can do
 
-## The niche
+- Add a clip by uploading a file, or record 8 seconds when this computer has a camera.
+- See the day as a thumbnail gallery: a 2×2 grid of four previews. Each preview is a frame labelled with the part of the day (Morning, Afternoon, or Evening) and the time. **Play** opens that clip. **Back** and **Next** move through further pages of four.
+- Ask a question in a text box, or upload a short voice question (Canary transcribes it when the speech model is up). Ask is connected to CoreWeave / W&B serverless inference at `https://api.inference.wandb.ai/v1`. The model is `meta-llama/Llama-3.1-8B-Instruct` unless `REMINISCE_LLM_MODEL` is set. The page shows `Connected to` that model when the reply came from it.
+- Read a grounded answer that quotes the Cosmos description and names the `clip_id` (`Source: clip_id`).
+- Play the clip the answer came from.
+- Send one clip to a carer, or take it back.
+- On **Carer**, turn on an optional daily note. That note contains only clips already sent.
+- Play a short story of three to five clips. The sentences are the clip descriptions, in time order.
 
-- **Who:** elderly people with early memory loss, living alone at home
-- **Second user / buyer:** their adult children, who live elsewhere and currently field the same worried phone calls all day
-- **Surface:** not a general assistant — five reassurance questions, answered calmly, identically, the 1st time and the 40th:
-  1. "Has Sarah been today?" *(people)*
-  2. "Where are my keys / glasses / hearing aid?" *(lost objects)*
-  3. "Did I lock the door?" *(safety checks)*
-  4. "Is the stove off?" *(safety checks)*
-  5. "When is my appointment?" *(what people told her)*
-- **Interface:** the TV — voice questions, huge captions (hearing loss), nothing new to learn. The app is for the family: a nightly recap and summary.
+A carer page searches only clips that were sent. Unshared clips are not in that search. **Eval** is a small button at the top of the page, not a tab in the main row.
 
-Explicitly **not**: care homes, late-stage care, medication management, an all-purpose companion, or a medical device.
+## What this build does not do
 
-## How it works
+No passive camera. No facial recognition. No medical advice. No safety-alarm framing. No accounts. No mobile app. The shared VSS collection (`vss-collection`) is not modified, and clips are not uploaded into the team's chunks bucket, so the shared ingest pipeline is not triggered.
 
-1. **Capture** — a POV phone and fixed door/kitchen cameras record the day in short chunks (10–30s).
-2. **Understand** — every chunk is captioned, transcribed and structured into a *memory entry*: time, place, people, action, objects, one plain statement of what happened.
-3. **Ask** — the user asks in plain language. The agent retrieves the matching moments and answers in one short sentence **with the source clip attached**.
-4. **Abstain** — if it isn't recorded, it says so: *"I don't have that recorded."* The agent never invents a memory — for this user, a confident hallucination is the worst possible failure.
-5. **Act** — appointments mentioned in conversation ("Dentist, Thursday 10am") become reminders; a stove left on in an empty kitchen triggers a spoken alert.
-6. **Recap** — every evening, a short "Your Day" film replays the day's key moments for the user (reviewing the day is the ritual shown to support autobiographical recall) and a summary goes to the family.
+## How an answer stays tied to a real clip
+
+1. `search_day` embeds the question with Cosmos Embed1 and ranks clip descriptions. Activity tags break close calls. A weak match is dropped instead of guessed.
+2. The W&B model may only pick `clip_id`s from that short list. Two prompts are compared in the eval: `strict` and `warm`. The app uses `warm`.
+3. The sentence on screen is the Cosmos description plus `Source: clip_id`. The model's free text is kept in the trace and the eval file. It is not shown as the memory.
+4. If the model names an id that is not a real clip, that id is dropped. If it names nothing usable, the top retrieved clip is cited instead. If nothing was retrieved, the answer is "I couldn't find that moment in your day." and it cites nothing.
+5. `get_clip` loads the row again before the sentence is built. `daily_digest` includes only clips whose `shared_with` contains the carer.
 
 ## Architecture
 
-```
-POV phone + fixed door/kitchen cameras
-        │  (10–30s chunks, live)
-        ▼
-VAST AI OS ── ingestion, one unified timeline, vector index, pipeline orchestration
-        │
-        ├──► YOLO ───────────────── per-frame detection/tracking: people, keys, glasses,
-        │                            hearing aid, cat, mug → "object last-seen" records
-        ├──► NVIDIA Cosmos Reason ─ per-chunk understanding: scene, activity, people,
-        │                            why it might matter → structured memory entries
-        └──► Speech-to-text ──────── transcripts ("Dentist, Thursday 10am")
-        │
-        ▼  memory entries + transcripts embedded → semantically searchable in VAST
-User asks (voice, on TV)
-        ▼
-W&B agent ── plans the query → semantic search retrieves moments → composes ONE
-             short grounded answer + the clip as proof — or abstains.
-             Side-jobs: reminder extraction · stove watch-list alerts ·
-             nightly recap + family summary. Every Q&A logged/traced in W&B.
-        ▼
-CoreWeave GPUs run the heavy inference (Cosmos + batch YOLO) underneath.
+```mermaid
+flowchart LR
+  clip[Clip file] --> frame[JPEG frame]
+  frame --> cosmos[Cosmos Reason]
+  cosmos --> embed[Cosmos Embed1]
+  embed --> journal[Local journal]
+  embed --> vast[VAST reminisce.clips]
+  journal --> agent[search_day get_clip daily_digest]
+  agent --> ui[Streamlit]
+  agent --> trace[Trace log and W and B]
 ```
 
-**Per-tech one-liners:** VAST = the memory's filing system and plumbing · Cosmos = the eyes that understand · YOLO = the tracker that never loses the keys · semantic search = how Margaret asks · W&B = the brain that answers, acts, and keeps receipts · CoreWeave = the GPU muscle · Cursor = build tooling.
+| Layer | What it is |
+| --- | --- |
+| Capture | Upload, or an 8 second camera recording. Practice clips are 6 second title cards. |
+| Understanding | Cosmos Reason describes one frame from the clip. |
+| Index | A 256-number Embed1 vector of that description, stored on the clip row in VastDB schema `reminisce`, table `clips`. |
+| Agent | W&B serverless inference selects clip ids. The tools are `search_day`, `get_clip`, and `daily_digest`. |
+| UI | Streamlit. 2×2 thumbnail gallery, ask, story, carer share, eval. |
+| Observability | `data/journal/traces.jsonl` for every ask, story, and digest. `scripts/run_eval.py` writes `data/journal/eval_latest.json` and a W&B table. |
 
-### Core data contracts
+Ask posts to `https://api.inference.wandb.ai/v1`. The chat model defaults to `meta-llama/Llama-3.1-8B-Instruct`. Override it with `REMINISCE_LLM_MODEL`. Cosmos Reason, Cosmos Embed1, and Canary are reached through `COSMOS3_REASON_URL`, `COSMOS_EMBED1_URL`, and `CANARY_1B_URL`. The model id for Cosmos and Embed is read from each server's `/v1/models`.
 
-```jsonc
-// Segment        { clip_id, camera, place, t_start, t_end, file }
-// Memory entry   { clip_id, t_start, t_end, place, people[], action, objects[],
-//                  statement, transcript, answers[], importance }
-// Answer         { text, clip_id, t_start, confidence, abstain }
+Credentials stay in the environment. The app reads them there. Do not copy keys, tokens, or host names into this folder.
+
+## Data model
+
+Each clip row:
+
+```json
+{
+  "clip_id": "clip_001",
+  "owner_id": "user_123",
+  "recorded_at": "2026-10-17T12:30:00+01:00",
+  "duration_s": 6.0,
+  "cosmos_description": "A frame with the words Lunch and Soup at the kitchen table.",
+  "activity_tags": ["lunch", "soup", "kitchen"],
+  "embedding_id": "emb_clip_001",
+  "shared_with": [],
+  "source_citation": "clip_001",
+  "media_relpath": "data/clips/clip_001.mp4",
+  "description_source": "cosmos"
+}
 ```
 
-## Build pipelines (parallel workstreams)
+`source_citation` is the same id as `clip_id`. `description_source` is `cosmos` or `fallback`. A fallback caption is the on-screen label, and the UI says so. The embedding itself lives in the journal and in VastDB as `embedding_json`. It is not shown in the UI.
 
-| Pipeline | Scope | Owner |
-|---|---|---|
-| 0 — Data collection | Film & label the day's clips | Team |
-| 1 — Video data storage | Ingestion, storage, unified timeline (VAST) | Prakash Verma |
-| 2 — Video → YOLO → text | Object/person detection & last-seen records *(optional layer)* | — |
-| 3 — Video → Cosmos → text | Per-chunk captions & understanding | Alec Y |
-| 4 — Text → LLM → Memory | Text + transcripts → structured memory entries, last-seen & coverage stores | Rosemary Ng + Prakash Verma |
-| 5 — Query LLM → Memory | Question answering over the memory store, with proof & abstention | F L |
+VastDB keeps every write. The newest `inserted_at` for a `clip_id` is the current row, so Send inserts a new row rather than editing the shared VSS tables.
 
-Every pipeline builds against the contracts above with mock data, so nobody blocks anybody; integration is by checkpoint, not at the deadline.
+## Repository
 
-## Demo (3 minutes)
+```text
+app.py                     Streamlit entry
+reminisce/catalog.py       Ten questions and the practice-clip labels
+reminisce/media.py         ffmpeg: title cards, frames, upload, camera
+reminisce/models.py        Cosmos, Embed1, Canary, W&B chat
+reminisce/ingest.py        One clip in, one row out
+reminisce/vast_index.py    reminisce.clips in this team's bucket
+reminisce/vectors.py       Cosine rank and tag fallback
+reminisce/agent.py         search_day, get_clip, daily_digest, story
+reminisce/evaluate.py      Ten-question comparison of two prompts
+reminisce/ui.py            Thumbnail gallery, ask, story, carer, eval
+scripts/check_stack.py     Probe the services, print no secrets
+scripts/make_sample_clips.py
+scripts/index_clips.py
+scripts/run_eval.py
+tests/test_reminisce.py    Grounding and share rules, no network
+```
 
-Meet Margaret. Her morning was recorded — now she asks it questions.
+The labelled questions:
 
-- **Ask** — "Where are my keys?" → *"In the blue bowl, 9:12"* + the clip plays
-- **Ask + act** — "Who came this morning?" → *"Sarah, your daughter"* + clip, and the **Thursday 10am dentist reminder** appears, extracted from what Sarah said
-- **Search** — "Show me everything with the cat" → the timeline filters to the moment
-- **Ask again** — "Has Sarah been today?" — the same calm answer, the same clip. As many times as she needs
-- **Honesty** — "Did I lock the front door?" → *"I don't have that recorded."*
-- **Spot + act** — kitchen feed: stove on, nobody there → a spoken reminder fires
-- **Recap** — the "Your Day" film plays; the family summary card is shown
+| Question | Clip |
+| --- | --- |
+| did I have lunch today? | clip_001 |
+| when did my daughter visit? | clip_002 |
+| when did I last go for a walk? | clip_003 |
+| did I take my medication this morning? | clip_004 |
+| did I have breakfast? | clip_005 |
+| did anyone phone me today? | clip_006 |
+| was I in the garden? | clip_007 |
+| did I watch television? | clip_008 |
+| did I rest this afternoon? | clip_009 |
+| did I open the front door? | clip_010 |
 
-> Wispy reminds you what's next. **MyDay gives you back what already happened — with proof.**
+## Commands
 
-## Trust & safety
+Run these one at a time from the cloned repository. Each block is a single command. Do not join them with `&&`.
 
-- **Grounded answers only** — every answer carries its source clip and timestamp
-- **Abstention by design** — low retrieval confidence → "I don't have that recorded"
-- **A memory aid, not a medical device** — no diagnosis, no medication claims
-- **Privacy** — home footage stays the family's; recap sharing is opt-in
-
-## Status
-
-Hackathon build — work in progress (demos 16:30, 17 Oct 2026).
-
-## Perception payload
-
-`pipeline/video_to_text.py` splits a video into 5-second windows and runs Cosmos Reason and YOLO11 in parallel. It writes JSONL whose `llm_input` field is the text a later memory LLM should read. This repo does not call that LLM. `library/example-descriptions/annotations.jsonl` is a 100-window sample of that contract, taken from footage already in the index.
-
-## Getting started
+Clone the repository:
 
 ```bash
 git clone https://github.com/prkshverma09/MyDay.git
+```
+
+```bash
 cd MyDay
 ```
 
-Setup and run instructions will be added once the project has code.
+Install the Python virtualenv packages if `python3 -m venv` is not already available:
 
-## Contributing
+```bash
+sudo DEBIAN_FRONTEND=noninteractive apt-get update
+```
 
-1. Create a branch from `main`.
-2. Make your changes and commit them with a clear message.
-3. Open a pull request against `main`.
+```bash
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3.12-venv python3-pip
+```
+
+Create the virtualenv and install the app libraries:
+
+```bash
+python3 -m venv .venv
+```
+
+```bash
+.venv/bin/pip install -r requirements.txt
+```
+
+Check Cosmos, Embed1, Canary, W&B, and VastDB. The command prints status lines only.
+
+```bash
+.venv/bin/python scripts/check_stack.py
+```
+
+Create the ten practice clips:
+
+```bash
+.venv/bin/python scripts/make_sample_clips.py
+```
+
+Describe them with Cosmos, embed the descriptions, and write VastDB:
+
+```bash
+.venv/bin/python scripts/index_clips.py
+```
+
+Run the unit tests:
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+Run the ten questions twice, once for each prompt, and log the table to W&B:
+
+```bash
+.venv/bin/python scripts/run_eval.py
+```
+
+Start the app. Leave this command running.
+
+```bash
+.venv/bin/streamlit run app.py
+```
+
+Open `http://127.0.0.1:8501`.
+
+To describe a single practice clip again:
+
+```bash
+.venv/bin/python scripts/index_clips.py --clip clip_001 --force
+```
+
+## Eval
+
+`scripts/run_eval.py` asks all ten questions with both prompts. It prints counts.
+
+- **Embedding retrieval:** the description vector alone ranked the labelled clip first.
+- **Hybrid retrieval:** the same rank, with an activity-tag bonus when a tag word is in the question. This is what `search_day` uses. Target: 8/10 or better.
+- **Raw selection:** the W&B reply contained the labelled `clip_id` before the safety fallback. This is the prompt comparison.
+- **Served:** the sentence the person would see cites the labelled clip.
+- **Grounded:** that sentence includes the real Cosmos description and a real `clip_id`, and no other `clip_id`. Target: 10/10. The script exits with status 1 if either prompt misses this.
+- **Hallucinations:** `clip_id`s in the raw model text that are not in the journal. They are counted and then dropped. They are not served.
+- **Latency:** mean seconds per question, including the embedding call and the W&B call.
+
+The same numbers are on the Eval page. W&B receives a table named `results` and the summary counts. The run URL is printed as `wandb: ...` and stored in `data/journal/eval_latest.json`.
+
+## Demo, about three minutes
+
+1. **My day.** Show lunch, the walk, and the visit in the 2×2 gallery. Say that these practice clips stand in for a consented recording, and that unshared clips stay here.
+2. **Ask.** Type `did I have lunch today?` and play the clip under the answer. Point at `Source: clip_001` and the connected model line.
+3. **Send** on the walk clip. Open **Carer** and show that only the walk is there. Ask `when did I last go for a walk?` on that page.
+4. **Eval.** Show hybrid retrieval, grounded answers, and the W&B line.
+5. Close on control: she shares what she wants, when she wants.
+
+## Use a real consented clip
+
+Record it yourself, 5 to 30 seconds, mp4 or webm, under 25 MB. In **My day**, tap **New clip**, add activity words such as `walk`, upload the file, and tap **Add**. The same Cosmos, embed, journal, and VastDB path runs. Do not upload someone else's medical or care footage.
+
+## When something fails
+
+- `check_stack.py` exits 1: read the failing line. Cosmos and Embed must be `ok` before indexing. Canary can fail; typing a question still works.
+- Cosmos descriptions look generic: run `.venv/bin/python scripts/index_clips.py --force` and read the one-line description printed for each clip. If a line says `fallback`, that clip did not get a Cosmos description.
+- Retrieval is under 8/10: the Eval table shows `embedding` and `hybrid` for each question. Hybrid is allowed to use the activity tags as a fallback. Say the real count in the demo.
+- VastDB did not mirror: the journal still works. `data/journal/vast_status.json` has a redacted reason. Re-run `scripts/index_clips.py --force` after VastDB is reachable.
+- Voice upload does nothing useful: Canary is optional. Type the question.
+
+## Privacy
+
+The older adult owns the clips. Send is per clip. Take it back removes the carer from `shared_with` and writes that row to VastDB. The daily note is off until the switch on the Carer page is on, and even then it only summarises clips already sent. There is no background recorder.
+
+## Also in this repository
+
+The Streamlit journal above is the app. These folders are separate tools already on `main`:
+
+- `video-chunker/` cuts one local video into timed mp4 chunks.
+- `pipeline/` writes 5-second Cosmos Reason and YOLO descriptions for a later language-model step. It does not call that model.
+- `library/example-descriptions/` holds sample window annotations for that later step.
