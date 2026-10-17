@@ -1,1 +1,123 @@
-IyBNeURheSDigJQgQXNrIFlvdXIgRGF5CgoqKkEgcGVyc29uYWwgZXBpc29kaWMgbWVtb3J5IGZvciBlbGRlcmx5IHBlb3BsZSB3aXRoIGVhcmx5IG1lbW9yeSBsb3NzIHdobyBsaXZlIGFsb25lLioqCgpZb3VyIGRheSBpcyByZWNvcmRlZC4gWW91IGNhbiBhc2sgaXQgYW55dGhpbmcg4oCUIGFuZCBldmVyeSBhbnN3ZXIgY29tZXMgd2l0aCB0aGUgYWN0dWFsIG1vbWVudCBhcyBwcm9vZi4KCkJ1aWx0IGJ5ICoqVGVhbSAyMCoqIGF0IHRoZSBSZWFsLVRpbWUgVmlkZW8gQWdlbnRzIEhhY2sg4oCUIExETiAoMTcgT2N0IDIwMjYpLgoKIyMgVGhlIHByb2JsZW0KClJlcGV0aXRpdmUgcXVlc3Rpb25pbmcgaXMgb25lIG9mIHRoZSBlYXJsaWVzdCBhbmQgbW9zdCBmcmVxdWVudCBiZWhhdmlvdXJzIGluIEFsemhlaW1lcidzIGFuZCBlYXJseSBtZW1vcnkgbG9zczogKiJIYXMgU2FyYWggYmVlbiB0b2RheT8iICJXaGVyZSBhcmUgbXkga2V5cz8iICJEaWQgSSBsb2NrIHRoZSBkb29yPyIqIOKAlCBhc2tlZCBhZ2FpbiBhbmQgYWdhaW4sIGRyaXZlbiBieSBnZW51aW5lIGFueGlldHkgYW5kIGEgbmVlZCBmb3IgcmVhc3N1cmFuY2UuIEZhbWlseSBjYXJlcnMgYW5zd2VyIHBhdGllbnRseeKApiB1bnRpbCB0aGV5IGNhbid0LiBFeGlzdGluZyBhc3Npc3RhbnRzIChlLmcuIHNtYXJ0LWdsYXNzZXMgY29tcGFuaW9ucykgZm9jdXMgb24gcHJvbXB0aW5nIHdoYXQgdG8gZG8gKipuZXh0KiouIE5vYm9keSBnaXZlcyBiYWNrIHdoYXQgKiphbHJlYWR5IGhhcHBlbmVkKiog4oCUIHdpdGggZXZpZGVuY2UuCgojIyBUaGUgbmljaGUKCi0gKipXaG86KiogZWxkZXJseSBwZW9wbGUgd2l0aCBlYXJseSBtZW1vcnkgbG9zcywgbGl2aW5nIGFsb25lIGF0IGhvbWUKLSAqKlNlY29uZCB1c2VyIC8gYnV5ZXI6KiogdGhlaXIgYWR1bHQgY2hpbGRyZW4sIHdobyBsaXZlIGVsc2V3aGVyZSBhbmQgY3VycmVudGx5IGZpZWxkIHRoZSBzYW1lIHdvcnJpZWQgcGhvbmUgY2FsbHMgYWxsIGRheQotICoqU3VyZmFjZToqKiBub3QgYSBnZW5lcmFsIGFzc2lzdGFudCDigJQgZml2ZSByZWFzc3VyYW5jZSBxdWVzdGlvbnMsIGFuc3dlcmVkIGNhbG1seSwgaWRlbnRpY2FsbHksIHRoZSAxc3QgdGltZSBhbmQgdGhlIDQwdGg6CiAgMS4gIkhhcyBTYXJhaCBiZWVuIHRvZGF5PyIgKihwZW9wbGUpKgogIDIuICJXaGVyZSBhcmUgbXkga2V5cyAvIGdsYXNzZXMgLyBoZWFyaW5nIGFpZD8iICoobG9zdCBvYmplY3RzKSoKICAzLiAiRGlkIEkgbG9jayB0aGUgZG9vcj8iICooc2FmZXR5IGNoZWNrcykqCiAgNC4gIklzIHRoZSBzdG92ZSBvZmY/IiAqKHNhZmV0eSBjaGVja3MpKgogIDUuICJXaGVuIGlzIG15IGFwcG9pbnRtZW50PyIgKih3aGF0IHBlb3BsZSB0b2xkIGhlcikqCi0gKipJbnRlcmZhY2U6KiogdGhlIFRWIOKAlCB2b2ljZSBxdWVzdGlvbnMsIGh1Z2UgY2FwdGlvbnMgKGhlYXJpbmcgbG9zcyksIG5vdGhpbmcgbmV3IHRvIGxlYXJuLiBUaGUgYXBwIGlzIGZvciB0aGUgZmFtaWx5OiBhIG5pZ2h0bHkgcmVjYXAgYW5kIHN1bW1hcnkuCgpFeHBsaWNpdGx5ICoqbm90Kio6IGNhcmUgaG9tZXMsIGxhdGUtc3RhZ2UgY2FyZSwgbWVkaWNhdGlvbiBtYW5hZ2VtZW50LCBhbiBhbGwtcHVycG9zZSBjb21wYW5pb24sIG9yIGEgbWVkaWNhbCBkZXZpY2UuCgojIyBIb3cgaXQgd29ya3MKCjEuICoqQ2FwdHVyZSoqIOKAlCBhIFBPViBwaG9uZSBhbmQgZml4ZWQgZG9vci9raXRjaGVuIGNhbWVyYXMgcmVjb3JkIHRoZSBkYXkgaW4gc2hvcnQgY2h1bmtzICgxMOKAkzMwcykuCjIuICoqVW5kZXJzdGFuZCoqIOKAlCBldmVyeSBjaHVuayBpcyBjYXB0aW9uZWQsIHRyYW5zY3JpYmVkIGFuZCBzdHJ1Y3R1cmVkIGludG8gYSAqbWVtb3J5IGVudHJ5KjogdGltZSwgcGxhY2UsIHBlb3BsZSwgYWN0aW9uLCBvYmplY3RzLCBvbmUgcGxhaW4gc3RhdGVtZW50IG9mIHdoYXQgaGFwcGVuZWQuCjMuICoqQXNrKiog4oCUIHRoZSB1c2VyIGFza3MgaW4gcGxhaW4gbGFuZ3VhZ2UuIFRoZSBhZ2VudCByZXRyaWV2ZXMgdGhlIG1hdGNoaW5nIG1vbWVudHMgYW5kIGFuc3dlcnMgaW4gb25lIHNob3J0IHNlbnRlbmNlICoqd2l0aCB0aGUgc291cmNlIGNsaXAgYXR0YWNoZWQqKi4KNC4gKipBYnN0YWluKiog4oCUIGlmIGl0IGlzbid0IHJlY29yZGVkLCBpdCBzYXlzIHNvOiAqIkkgZG9uJ3QgaGF2ZSB0aGF0IHJlY29yZGVkLiIqIFRoZSBhZ2VudCBuZXZlciBpbnZlbnRzIGEgbWVtb3J5IOKAlCBmb3IgdGhpcyB1c2VyLCBhIGNvbmZpZGVudCBoYWxsdWNpbmF0aW9uIGlzIHRoZSB3b3JzdCBwb3NzaWJsZSBmYWlsdXJlLgo1LiAqKkFjdCoqIOKAlCBhcHBvaW50bWVudHMgbWVudGlvbmVkIGluIGNvbnZlcnNhdGlvbiAoIkRlbnRpc3QsIFRodXJzZGF5IDEwYW0iKSBiZWNvbWUgcmVtaW5kZXJzOyBhIHN0b3ZlIGxlZnQgb24gaW4gYW4gZW1wdHkga2l0Y2hlbiB0cmlnZ2VycyBhIHNwb2tlbiBhbGVydC4KNi4gKipSZWNhcCoqIOKAlCBldmVyeSBldmVuaW5nLCBhIHNob3J0ICJZb3VyIERheSIgZmlsbSByZXBsYXlzIHRoZSBkYXkncyBrZXkgbW9tZW50cyBmb3IgdGhlIHVzZXIgKHJldmlld2luZyB0aGUgZGF5IGlzIHRoZSByaXR1YWwgc2hvd24gdG8gc3VwcG9ydCBhdXRvYmlvZ3JhcGhpY2FsIHJlY2FsbCkgYW5kIGEgc3VtbWFyeSBnb2VzIHRvIHRoZSBmYW1pbHkuCgojIyBBcmNoaXRlY3R1cmUKCmBgYApQT1YgcGhvbmUgKyBmaXhlZCBkb29yL2tpdGNoZW4gY2FtZXJhcwogICAgICAgIOKUgiAgKDEw4oCTMzBzIGNodW5rcywgbGl2ZSkKICAgICAgICDilrwKVkFTVCBBSSBPUyDilIDilIAgaW5nZXN0aW9uLCBvbmUgdW5pZmllZCB0aW1lbGluZSwgdmVjdG9yIGluZGV4LCBwaXBlbGluZSBvcmNoZXN0cmF0aW9uCiAgICAgICAg4pSCCiAgICAgICAg4pSc4pSA4pSA4pa6IFlPTE8g4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSAIHBlci1mcmFtZSBkZXRlY3Rpb24vdHJhY2tpbmc6IHBlb3BsZSwga2V5cywgZ2xhc3NlcywKICAgICAgICDilIIgICAgICAgICAgICAgICAgICAgICAgICAgICAgaGVhcmluZyBhaWQsIGNhdCwgbXVnIOKGkiAib2JqZWN0IGxhc3Qtc2VlbiIgcmVjb3JkcwogICAgICAgIOKUnOKUgOKUgOKWuiBOVklESUEgQ29zbW9zIFJlYXNvbiDilIAgcGVyLWNodW5rIHVuZGVyc3RhbmRpbmc6IHNjZW5lLCBhY3Rpdml0eSwgcGVvcGxlLAogICAgICAgIOKUgiAgICAgICAgICAgICAgICAgICAgICAgICAgICB3aHkgaXQgbWlnaHQgbWF0dGVyIOKGkiBzdHJ1Y3R1cmVkIG1lbW9yeSBlbnRyaWVzCiAgICAgICAg4pSU4pSA4pSA4pa6IFNwZWVjaC10by10ZXh0IOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgCB0cmFuc2NyaXB0cyAoIkRlbnRpc3QsIFRodXJzZGF5IDEwYW0iKQogICAgICAgIOKUggogICAgICAgIOKWvCAgbWVtb3J5IGVudHJpZXMgKyB0cmFuc2NyaXB0cyBlbWJlZGRlZCDihpIgc2VtYW50aWNhbGx5IHNlYXJjaGFibGUgaW4gVkFTVApVc2VyIGFza3MgKHZvaWNlLCBvbiBUVikKICAgICAgICDilrwKVyZCIGFnZW50IOKUgOKUgCBwbGFucyB0aGUgcXVlcnkg4oaSIHNlbWFudGljIHNlYXJjaCByZXRyaWV2ZXMgbW9tZW50cyDihpIgY29tcG9zZXMgT05FCiAgICAgICAgICAgICBzaG9ydCBncm91bmRlZCBhbnN3ZXIgKyB0aGUgY2xpcCBhcyBwcm9vZiDigJQgb3IgYWJzdGFpbnMuCiAgICAgICAgICAgICBTaWRlLWpvYnM6IHJlbWluZGVyIGV4dHJhY3Rpb24gwrcgc3RvdmUgd2F0Y2gtbGlzdCBhbGVydHMgwrcKICAgICAgICAgICAgIG5pZ2h0bHkgcmVjYXAgKyBmYW1pbHkgc3VtbWFyeS4gRXZlcnkgUSZBIGxvZ2dlZC90cmFjZWQgaW4gVyZCLgogICAgICAgIOKWvApDb3JlV2VhdmUgR1BVcyBydW4gdGhlIGhlYXZ5IGluZmVyZW5jZSAoQ29zbW9zICsgYmF0Y2ggWU9MTykgdW5kZXJuZWF0aC4KYGBgCgoqKlBlci10ZWNoIG9uZS1saW5lcnM6KiogVkFTVCA9IHRoZSBtZW1vcnkncyBmaWxpbmcgc3lzdGVtIGFuZCBwbHVtYmluZyDCtyBDb3Ntb3MgPSB0aGUgZXllcyB0aGF0IHVuZGVyc3RhbmQgwrcgWU9MTyA9IHRoZSB0cmFja2VyIHRoYXQgbmV2ZXIgbG9zZXMgdGhlIGtleXMgwrcgc2VtYW50aWMgc2VhcmNoID0gaG93IE1hcmdhcmV0IGFza3MgwrcgVyZCID0gdGhlIGJyYWluIHRoYXQgYW5zd2VycywgYWN0cywgYW5kIGtlZXBzIHJlY2VpcHRzIMK3IENvcmVXZWF2ZSA9IHRoZSBHUFUgbXVzY2xlIMK3IEN1cnNvciA9IGJ1aWxkIHRvb2xpbmcuCgojIyMgQ29yZSBkYXRhIGNvbnRyYWN0cwoKYGBganNvbmMKLy8gU2VnbWVudCAgICAgICAgeyBjbGlwX2lkLCBjYW1lcmEsIHBsYWNlLCB0X3N0YXJ0LCB0X2VuZCwgZmlsZSB9Ci8vIE1lbW9yeSBlbnRyeSAgIHsgY2xpcF9pZCwgdF9zdGFydCwgdF9lbmQsIHBsYWNlLCBwZW9wbGVbXSwgYWN0aW9uLCBvYmplY3RzW10sCi8vICAgICAgICAgICAgICAgICAgc3RhdGVtZW50LCB0cmFuc2NyaXB0LCBhbnN3ZXJzW10sIGltcG9ydGFuY2UgfQovLyBBbnN3ZXIgICAgICAgICB7IHRleHQsIGNsaXBfaWQsIHRfc3RhcnQsIGNvbmZpZGVuY2UsIGFic3RhaW4gfQpgYGAKCiMjIEJ1aWxkIHBpcGVsaW5lcyAocGFyYWxsZWwgd29ya3N0cmVhbXMpCgp8IFBpcGVsaW5lIHwgU2NvcGUgfCBPd25lciB8CnwtLS18LS0tfC0tLXwKfCAwIOKAlCBEYXRhIGNvbGxlY3Rpb24gfCBGaWxtICYgbGFiZWwgdGhlIGRheSdzIGNsaXBzIHwgVGVhbSB8CnwgMSDigJQgVmlkZW8gZGF0YSBzdG9yYWdlIHwgSW5nZXN0aW9uLCBzdG9yYWdlLCB1bmlmaWVkIHRpbWVsaW5lIChWQVNUKSB8IFByYWthc2ggVmVybWEgfAp8IDIg4oCUIFZpZGVvIOKGkiBZT0xPIOKGkiB0ZXh0IHwgT2JqZWN0L3BlcnNvbiBkZXRlY3Rpb24gJiBsYXN0LXNlZW4gcmVjb3JkcyAqKG9wdGlvbmFsIGxheWVyKSogfCDigJQgfAp8IDMg4oCUIFZpZGVvIOKGkiBDb3Ntb3Mg4oaSIHRleHQgfCBQZXItY2h1bmsgY2FwdGlvbnMgJiB1bmRlcnN0YW5kaW5nIHwgQWxlYyBZIHwKfCA0IOKAlCBUZXh0IOKGkiBMTE0g4oaSIE1lbW9yeSB8IFRleHQgKyB0cmFuc2NyaXB0cyDihpIgc3RydWN0dXJlZCBtZW1vcnkgZW50cmllcywgbGFzdC1zZWVuICYgY292ZXJhZ2Ugc3RvcmVzIHwgUm9zZW1hcnkgTmcgKyBQcmFrYXNoIFZlcm1hIHwKfCA1IOKAlCBRdWVyeSBMTE0g4oaSIE1lbW9yeSB8IFF1ZXN0aW9uIGFuc3dlcmluZyBvdmVyIHRoZSBtZW1vcnkgc3RvcmUsIHdpdGggcHJvb2YgJiBhYnN0ZW50aW9uIHwgRiBMIHwKCkV2ZXJ5IHBpcGVsaW5lIGJ1aWxkcyBhZ2FpbnN0IHRoZSBjb250cmFjdHMgYWJvdmUgd2l0aCBtb2NrIGRhdGEsIHNvIG5vYm9keSBibG9ja3MgYW55Ym9keTsgaW50ZWdyYXRpb24gaXMgYnkgY2hlY2twb2ludCwgbm90IGF0IHRoZSBkZWFkbGluZS4KCiMjIERlbW8gKDMgbWludXRlcykKCk1lZXQgTWFyZ2FyZXQuIEhlciBtb3JuaW5nIHdhcyByZWNvcmRlZCDigJQgbm93IHNoZSBhc2tzIGl0IHF1ZXN0aW9ucy4KCi0gKipBc2sqKiDigJQgIldoZXJlIGFyZSBteSBrZXlzPyIg4oaSICoiSW4gdGhlIGJsdWUgYm93bCwgOToxMiIqICsgdGhlIGNsaXAgcGxheXMKLSAqKkFzayArIGFjdCoqIOKAlCAiV2hvIGNhbWUgdGhpcyBtb3JuaW5nPyIg4oaSICoiU2FyYWgsIHlvdXIgZGF1Z2h0ZXIiKiArIGNsaXAsIGFuZCB0aGUgKipUaHVyc2RheSAxMGFtIGRlbnRpc3QgcmVtaW5kZXIqKiBhcHBlYXJzLCBleHRyYWN0ZWQgZnJvbSB3aGF0IFNhcmFoIHNhaWQKLSAqKlNlYXJjaCoqIOKAlCAiU2hvdyBtZSBldmVyeXRoaW5nIHdpdGggdGhlIGNhdCIg4oaSIHRoZSB0aW1lbGluZSBmaWx0ZXJzIHRvIHRoZSBtb21lbnQKLSAqKkFzayBhZ2FpbioqIOKAlCAiSGFzIFNhcmFoIGJlZW4gdG9kYXk/IiDigJQgdGhlIHNhbWUgY2FsbSBhbnN3ZXIsIHRoZSBzYW1lIGNsaXAuIEFzIG1hbnkgdGltZXMgYXMgc2hlIG5lZWRzCi0gKipIb25lc3R5Kiog4oCUICJEaWQgSSBsb2NrIHRoZSBmcm9udCBkb29yPyIg4oaSICoiSSBkb24ndCBoYXZlIHRoYXQgcmVjb3JkZWQuIioKLSAqKlNwb3QgKyBhY3QqKiDigJQga2l0Y2hlbiBmZWVkOiBzdG92ZSBvbiwgbm9ib2R5IHRoZXJlIOKGkiBhIHNwb2tlbiByZW1pbmRlciBmaXJlcwotICoqUmVjYXAqKiDigJQgdGhlICJZb3VyIERheSIgZmlsbSBwbGF5czsgdGhlIGZhbWlseSBzdW1tYXJ5IGNhcmQgaXMgc2hvd24KCj4gV2lzcHkgcmVtaW5kcyB5b3Ugd2hhdCdzIG5leHQuICoqTXlEYXkgZ2l2ZXMgeW91IGJhY2sgd2hhdCBhbHJlYWR5IGhhcHBlbmVkIOKAlCB3aXRoIHByb29mLioqCgojIyBUcnVzdCAmIHNhZmV0eQoKLSAqKkdyb3VuZGVkIGFuc3dlcnMgb25seSoqIOKAlCBldmVyeSBhbnN3ZXIgY2FycmllcyBpdHMgc291cmNlIGNsaXAgYW5kIHRpbWVzdGFtcAotICoqQWJzdGVudGlvbiBieSBkZXNpZ24qKiDigJQgbG93IHJldHJpZXZhbCBjb25maWRlbmNlIOKGkiAiSSBkb24ndCBoYXZlIHRoYXQgcmVjb3JkZWQiCi0gKipBIG1lbW9yeSBhaWQsIG5vdCBhIG1lZGljYWwgZGV2aWNlKiog4oCUIG5vIGRpYWdub3Npcywgbm8gbWVkaWNhdGlvbiBjbGFpbXMKLSAqKlByaXZhY3kqKiDigJQgaG9tZSBmb290YWdlIHN0YXlzIHRoZSBmYW1pbHknczsgcmVjYXAgc2hhcmluZyBpcyBvcHQtaW4KCiMjIFN0YXR1cwoKSGFja2F0aG9uIGJ1aWxkIOKAlCB3b3JrIGluIHByb2dyZXNzIChkZW1vcyAxNjozMCwgMTcgT2N0IDIwMjYpLgoKIyMgR2V0dGluZyBzdGFydGVkCgpgYGBiYXNoCmdpdCBjbG9uZSBodHRwczovL2dpdGh1Yi5jb20vcHJrc2h2ZXJtYTA5L015RGF5LmdpdApjZCBNeURheQpgYGAKClNldHVwIGFuZCBydW4gaW5zdHJ1Y3Rpb25zIHdpbGwgYmUgYWRkZWQgb25jZSB0aGUgcHJvamVjdCBoYXMgY29kZS4KCiMjIENvbnRyaWJ1dGluZwoKMS4gQ3JlYXRlIGEgYnJhbmNoIGZyb20gYG1haW5gLgoyLiBNYWtlIHlvdXIgY2hhbmdlcyBhbmQgY29tbWl0IHRoZW0gd2l0aCBhIGNsZWFyIG1lc3NhZ2UuCjMuIE9wZW4gYSBwdWxsIHJlcXVlc3QgYWdhaW5zdCBgbWFpbmAuCg==
+# MyDay — Ask Your Day
+
+**A personal episodic memory for elderly people with early memory loss who live alone.**
+
+Your day is recorded. You can ask it anything — and every answer comes with the actual moment as proof.
+
+Built by **Team 20** at the Real-Time Video Agents Hack — LDN (17 Oct 2026).
+
+## The problem
+
+Repetitive questioning is one of the earliest and most frequent behaviours in Alzheimer's and early memory loss: *"Has Sarah been today?" "Where are my keys?" "Did I lock the door?"* — asked again and again, driven by genuine anxiety and a need for reassurance. Family carers answer patiently… until they can't. Existing assistants (e.g. smart-glasses companions) focus on prompting what to do **next**. Nobody gives back what **already happened** — with evidence.
+
+## The niche
+
+- **Who:** elderly people with early memory loss, living alone at home
+- **Second user / buyer:** their adult children, who live elsewhere and currently field the same worried phone calls all day
+- **Surface:** not a general assistant — five reassurance questions, answered calmly, identically, the 1st time and the 40th:
+  1. "Has Sarah been today?" *(people)*
+  2. "Where are my keys / glasses / hearing aid?" *(lost objects)*
+  3. "Did I lock the door?" *(safety checks)*
+  4. "Is the stove off?" *(safety checks)*
+  5. "When is my appointment?" *(what people told her)*
+- **Interface:** the TV — voice questions, huge captions (hearing loss), nothing new to learn. The app is for the family: a nightly recap and summary.
+
+Explicitly **not**: care homes, late-stage care, medication management, an all-purpose companion, or a medical device.
+
+## How it works
+
+1. **Capture** — a POV phone and fixed door/kitchen cameras record the day in short chunks (10–30s).
+2. **Understand** — every chunk is captioned, transcribed and structured into a *memory entry*: time, place, people, action, objects, one plain statement of what happened.
+3. **Ask** — the user asks in plain language. The agent retrieves the matching moments and answers in one short sentence **with the source clip attached**.
+4. **Abstain** — if it isn't recorded, it says so: *"I don't have that recorded."* The agent never invents a memory — for this user, a confident hallucination is the worst possible failure.
+5. **Act** — appointments mentioned in conversation ("Dentist, Thursday 10am") become reminders; a stove left on in an empty kitchen triggers a spoken alert.
+6. **Recap** — every evening, a short "Your Day" film replays the day's key moments for the user (reviewing the day is the ritual shown to support autobiographical recall) and a summary goes to the family.
+
+## Architecture
+
+```
+POV phone + fixed door/kitchen cameras
+        │  (10–30s chunks, live)
+        ▼
+VAST AI OS ── ingestion, one unified timeline, vector index, pipeline orchestration
+        │
+        ├──► YOLO ───────────────── per-frame detection/tracking: people, keys, glasses,
+        │                            hearing aid, cat, mug → "object last-seen" records
+        ├──► NVIDIA Cosmos Reason ─ per-chunk understanding: scene, activity, people,
+        │                            why it might matter → structured memory entries
+        └──► Speech-to-text ──────── transcripts ("Dentist, Thursday 10am")
+        │
+        ▼  memory entries + transcripts embedded → semantically searchable in VAST
+User asks (voice, on TV)
+        ▼
+W&B agent ── plans the query → semantic search retrieves moments → composes ONE
+             short grounded answer + the clip as proof — or abstains.
+             Side-jobs: reminder extraction · stove watch-list alerts ·
+             nightly recap + family summary. Every Q&A logged/traced in W&B.
+        ▼
+CoreWeave GPUs run the heavy inference (Cosmos + batch YOLO) underneath.
+```
+
+**Per-tech one-liners:** VAST = the memory's filing system and plumbing · Cosmos = the eyes that understand · YOLO = the tracker that never loses the keys · semantic search = how Margaret asks · W&B = the brain that answers, acts, and keeps receipts · CoreWeave = the GPU muscle · Cursor = build tooling.
+
+### Core data contracts
+
+```jsonc
+// Segment        { clip_id, camera, place, t_start, t_end, file }
+// Memory entry   { clip_id, t_start, t_end, place, people[], action, objects[],
+//                  statement, transcript, answers[], importance }
+// Answer         { text, clip_id, t_start, confidence, abstain }
+```
+
+## Build pipelines (parallel workstreams)
+
+| Pipeline | Scope | Owner |
+|---|---|---|
+| 0 — Data collection | Film & label the day's clips | Team |
+| 1 — Video data storage | Ingestion, storage, unified timeline (VAST) | Prakash Verma |
+| 2 — Video → YOLO → text | Object/person detection & last-seen records *(optional layer)* | — |
+| 3 — Video → Cosmos → text | Per-chunk captions & understanding | Alec Y |
+| 4 — Text → LLM → Memory | Text + transcripts → structured memory entries, last-seen & coverage stores | Rosemary Ng + Prakash Verma |
+| 5 — Query LLM → Memory | Question answering over the memory store, with proof & abstention | F L |
+
+Every pipeline builds against the contracts above with mock data, so nobody blocks anybody; integration is by checkpoint, not at the deadline.
+
+## Demo (3 minutes)
+
+Meet Margaret. Her morning was recorded — now she asks it questions.
+
+- **Ask** — "Where are my keys?" → *"In the blue bowl, 9:12"* + the clip plays
+- **Ask + act** — "Who came this morning?" → *"Sarah, your daughter"* + clip, and the **Thursday 10am dentist reminder** appears, extracted from what Sarah said
+- **Search** — "Show me everything with the cat" → the timeline filters to the moment
+- **Ask again** — "Has Sarah been today?" — the same calm answer, the same clip. As many times as she needs
+- **Honesty** — "Did I lock the front door?" → *"I don't have that recorded."*
+- **Spot + act** — kitchen feed: stove on, nobody there → a spoken reminder fires
+- **Recap** — the "Your Day" film plays; the family summary card is shown
+
+> Wispy reminds you what's next. **MyDay gives you back what already happened — with proof.**
+
+## Trust & safety
+
+- **Grounded answers only** — every answer carries its source clip and timestamp
+- **Abstention by design** — low retrieval confidence → "I don't have that recorded"
+- **A memory aid, not a medical device** — no diagnosis, no medication claims
+- **Privacy** — home footage stays the family's; recap sharing is opt-in
+
+## Status
+
+Hackathon build — work in progress (demos 16:30, 17 Oct 2026).
+
+## Getting started
+
+```bash
+git clone https://github.com/prkshverma09/MyDay.git
+cd MyDay
+```
+
+Setup and run instructions will be added once the project has code.
+
+## Contributing
+
+1. Create a branch from `main`.
+2. Make your changes and commit them with a clear message.
+3. Open a pull request against `main`.
