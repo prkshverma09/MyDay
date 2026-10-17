@@ -52,8 +52,10 @@ def test_home_windows_split_into_general_and_key(tmp_path):
     assert len(key_rows) == 3
     general_text = (day_dir / "general_memory.txt").read_text(encoding="utf-8")
     key_text = (day_dir / "key_moments.txt").read_text(encoding="utf-8")
-    assert general_text.splitlines()[0] == "2026-10-17  0:00–0:05  You filled a kettle at the sink in the kitchen."
-    assert "2026-10-17  0:05–0:10  You put your keys down in the hallway." in key_text.splitlines()
+    assert general_text.splitlines()[0] == "0:00–0:05  You filled a kettle at the sink in the kitchen."
+    assert "0:05–0:10  You put your keys down in the hallway." in key_text.splitlines()
+    assert "2026-10-17" not in general_text
+    assert "2026-10-17" not in key_text
     assert "keys" not in general_text
     saved = general_rows[0]
     assert next(iter(saved)) == "text"
@@ -67,7 +69,7 @@ def test_home_windows_split_into_general_and_key(tmp_path):
     for entry in filed["entries"]:
         covered.update(entry.get("window_ids") or [])
     assert covered == {record["id"] for record in load_records(HOME)}
-    assert read_memory(day_dir / "general_memory.txt")[0]["day"] == "2026-10-17"
+    assert day_dir.name == "2026-10-17"
     assert read_memory(day_dir / "general_memory.txt")[0]["start_sec"] == 0
     assert read_memory(day_dir / "general_memory.txt")[0]["end_sec"] == 5
 
@@ -80,8 +82,10 @@ def test_two_days_are_separate_folders(tmp_path):
     write_stores(file_records([friday, saturday]), tmp_path)
     friday_text = (tmp_path / "2026-10-16" / "general_memory.txt").read_text(encoding="utf-8")
     saturday_text = (tmp_path / "2026-10-17" / "general_memory.txt").read_text(encoding="utf-8")
-    assert friday_text.splitlines() == ["2026-10-16  0:00–0:05  You walked into the living room."]
-    assert saturday_text.splitlines() == ["2026-10-17  0:00–0:05  You walked into the living room."]
+    assert friday_text.splitlines() == ["0:00–0:05  You walked into the living room."]
+    assert saturday_text.splitlines() == ["0:00–0:05  You walked into the living room."]
+    assert "2026-10-16" not in friday_text
+    assert "2026-10-17" not in saturday_text
     reference = json.loads((tmp_path / "2026-10-17" / "general_memory.json").read_text(encoding="utf-8"))
     assert reference[0]["text"] == saturday_text.strip()
     assert reference[0]["video"]["start_sec"] == 0.0
