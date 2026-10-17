@@ -34,6 +34,8 @@ def test_exact_command_reencodes_h264_aac():
     assert "-map" in cmd and "0:a:0" in cmd
     assert cmd[-1] == "out/holiday_%04d.mp4"
     assert cmd[cmd.index("-segment_time") + 1] == "15.000000"
+    assert cmd[cmd.index("-force_key_frames") + 1] == "expr:gte(t,n_forced*15.000000)"
+    assert "-break_non_keyframes" not in cmd
 
 
 def test_exact_command_omits_audio_when_absent():
@@ -47,6 +49,7 @@ def test_exact_command_omits_audio_when_absent():
     )
     assert "0:a:0" not in cmd
     assert "aac" not in cmd
+    assert cmd[cmd.index("-force_key_frames") + 1] == "expr:gte(t,n_forced*15.000000)"
 
 
 def test_fast_command_copies_packets():
@@ -61,6 +64,8 @@ def test_fast_command_copies_packets():
     assert cmd[0] == "/usr/local/bin/ffmpeg"
     assert cmd[cmd.index("-c") + 1] == "copy"
     assert "libx264" not in cmd
+    assert "-force_key_frames" not in cmd
+    assert "-break_non_keyframes" not in cmd
 
 
 def test_fast_mode_rejects_vp9():

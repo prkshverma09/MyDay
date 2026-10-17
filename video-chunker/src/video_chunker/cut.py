@@ -69,6 +69,10 @@ def build_ffmpeg_command(
     ])
     if mode == MODE_EXACT:
         cmd.extend(EXACT_VIDEO_ARGS)
+        cmd.extend([
+            "-force_key_frames",
+            f"expr:gte(t,n_forced*{chunk_s:.6f})",
+        ])
         if has_audio:
             cmd.extend(EXACT_AUDIO_ARGS)
     elif mode == MODE_FAST:
@@ -140,10 +144,6 @@ def chunk_video(
         mode=mode,
         has_audio=info.audio_codec is not None,
     )
-    if mode == MODE_EXACT:
-        # The segment muxer otherwise waits for a keyframe and ignores chunk_s.
-        at = cmd.index("-reset_timestamps") + 2
-        cmd[at:at] = ["-break_non_keyframes", "1"]
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         detail = result.stderr.strip() or "ffmpeg failed"
