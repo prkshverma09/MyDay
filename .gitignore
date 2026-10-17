@@ -6,6 +6,8 @@ __pycache__/
 wandb/
 weave/
 data/journal/
+data/memory/*
+!data/memory/.gitkeep
 data/clips/*.mp4
 data/clips/*.jpg
 data/clips/frames/

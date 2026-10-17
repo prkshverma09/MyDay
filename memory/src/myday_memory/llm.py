@@ -53,7 +53,81 @@ class WandbMemoryModel:
     def complete(self, llm_input: str) -> dict:
         from myday_memory.file_memory import load_instruction
 
-        return chat_json(load_instruction(), llm_input, model=self.model)
+        return memory_response(chat_json(load_instruction(), llm_input, model=self.model))
+
+
+_ENTRY_FIELDS = (
+    "store",
+    "key_reason",
+    "statement",
+    "actors",
+    "objects",
+    "appointment",
+    "importance",
+)
+_KEY_REASONS = {
+    "visitor or conversation",
+    "appliance on or off",
+    "object put down or picked up",
+    "front door",
+    "door locked",
+    "unusual event",
+    "reading",
+}
+
+
+def memory_response(parsed: dict) -> dict:
+    """Normalise a model object to {"entries": [...]}."""
+
+    if isinstance(parsed.get("entries"), list):
+        raw_entries = parsed["entries"]
+    elif any(field in parsed for field in _ENTRY_FIELDS):
+        raw_entries = [parsed]
+    else:
+        raw_entries = []
+    return {"entries": [_validate_entry(item) for item in raw_entries if isinstance(item, dict)]}
+
+
+def _validate_entry(raw: dict) -> dict:
+    reason = raw.get("key_reason")
+    if reason not in _KEY_REASONS:
+        reason = None
+    store = raw.get("store")
+    if store not in {"general", "key"}:
+        store = "key" if reason else "general"
+    if store == "general":
+        reason = None
+    statement = raw.get("statement")
+    statement = statement.strip() if isinstance(statement, str) else ""
+    actors = [actor.strip() for actor in raw.get("actors") or [] if isinstance(actor, str) and actor.strip()]
+    objects = []
+    for obj in raw.get("objects") or []:
+        if not isinstance(obj, dict):
+            continue
+        label = obj.get("label")
+        if not isinstance(label, str) or not label.strip():
+            continue
+        position = obj.get("position") if isinstance(obj.get("position"), str) else ""
+        objects.append({"label": label.strip(), "position": position})
+    appointment = raw.get("appointment")
+    if not isinstance(appointment, str) or not appointment.strip():
+        appointment = None
+    else:
+        appointment = appointment.strip()
+    try:
+        importance = float(raw.get("importance") or 0.0)
+    except (TypeError, ValueError):
+        importance = 0.0
+    importance = min(1.0, max(0.0, importance))
+    return {
+        "store": store,
+        "key_reason": reason,
+        "statement": statement,
+        "actors": actors,
+        "objects": objects,
+        "appointment": appointment,
+        "importance": importance,
+    }
 
 
 def chat_json(system: str, user: str, model: str | None = None) -> dict:

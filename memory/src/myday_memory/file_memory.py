@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from pathlib import Path
 
 from myday_memory.parse_input import LlmInput, parse_llm_input
@@ -78,9 +79,92 @@ _SKIP_NAMES = {
     "morning", "remember", "hello", "lovely", "please", "cosmos", "yolo",
 }
 _MOVE = re.compile(
-    r"\b(walk|walks|walked|goes|went|into the|to the)\b",
+    r"\b(walk|walks|walked|goes|went|enter|enters|entered)\b",
     re.IGNORECASE,
 )
+_PLACE_WORDS = {
+    "home_kitchen": "the kitchen",
+    "home_living_room": "the living room",
+    "home_hallway": "the hallway",
+    "home_bedroom": "the bedroom",
+    "home_garden": "the garden",
+    "kitchen": "the kitchen",
+    "living_room": "the living room",
+    "living room": "the living room",
+    "hallway": "the hallway",
+    "bedroom": "the bedroom",
+    "garden": "the garden",
+    "front_door": "the front door",
+    "front door": "the front door",
+}
+_RAW_PLACE = re.compile(r"\bhome_[a-z0-9_]+\b", re.IGNORECASE)
+_KETTLE_SWITCH = re.compile(
+    r"\b(press|presses|pressed|push|pushes|pushed)\b.{0,40}\bswitch\b"
+    r"|\bswitch\b.{0,40}\b(press|presses|pressed|push|pushes|pushed)\b",
+    re.IGNORECASE,
+)
+_ACTION = re.compile(
+    r"\b(fill|fills|filled|pour|pours|poured|walk|walks|walked|pick|picks|picked|"
+    r"open|opens|opened|press|presses|pressed|set|sets|drop|drops|dropped|"
+    r"carry|carries|carried|turn|turns|turned|flip|flips|flipped|feed|feeds|"
+    r"put|puts|lock|locks|unlock|unlocks|read|reads|reading|enter|enters|"
+    r"entered|run|runs|running|click|clicks|tip|tips|tipped|lift|lifts|"
+    r"lifted|reach|reaches|reached|knock|knocks|knocked)\b",
+    re.IGNORECASE,
+)
+_DETAIL = re.compile(
+    r"\b(rests|resting|leans|leaning|looks|looking|waits|waiting|"
+    r"stands still|empty|raised|holding the kettle in place)\b",
+    re.IGNORECASE,
+)
+_PAST = {
+    "fill": "filled",
+    "fills": "filled",
+    "pick": "picked",
+    "picks": "picked",
+    "press": "pressed",
+    "presses": "pressed",
+    "set": "set",
+    "sets": "set",
+    "drop": "dropped",
+    "drops": "dropped",
+    "open": "opened",
+    "opens": "opened",
+    "carry": "carried",
+    "carries": "carried",
+    "walk": "walked",
+    "walks": "walked",
+    "enter": "entered",
+    "enters": "entered",
+    "pour": "poured",
+    "pours": "poured",
+    "take": "took",
+    "takes": "took",
+    "turn": "turned",
+    "turns": "turned",
+    "flip": "flipped",
+    "flips": "flipped",
+    "lock": "locked",
+    "locks": "locked",
+    "unlock": "unlocked",
+    "unlocks": "unlocked",
+    "put": "put",
+    "puts": "put",
+    "read": "read",
+    "reads": "read",
+    "sit": "sat",
+    "sits": "sat",
+    "lift": "lifted",
+    "lifts": "lifted",
+    "reach": "reached",
+    "reaches": "reached",
+    "tip": "tipped",
+    "tips": "tipped",
+    "rest": "rested",
+    "rests": "rested",
+    "knock": "knocked",
+    "knocks": "knocked",
+}
 
 
 def load_instruction() -> str:
@@ -88,7 +172,15 @@ def load_instruction() -> str:
 
 
 def file_record(record: dict, llm=None) -> dict:
-    """Return one memory entry. Identity fields are copied off the record."""
+    """Return the first memory entry for a window. Identity fields are copied off the record."""
+
+    return file_window(record, llm=llm)[0]
+
+
+def file_window(record: dict, llm=None) -> list[dict]:
+    """Return one entry per distinct event. Every entry keeps this window's video span."""
+
+    from myday_memory.llm import memory_response
 
     text = str(record.get("llm_input") or "")
     parsed = parse_llm_input(text)
@@ -100,21 +192,21 @@ def file_record(record: dict, llm=None) -> dict:
             proposed = None
         if not isinstance(proposed, dict):
             proposed = None
-    entry = _from_rules(record, parsed)
+    entries = _from_rules_many(record, parsed)
     if proposed is not None:
-        _apply_wording(entry, proposed, parsed)
-    return entry
+        _apply_proposals(entries, memory_response(proposed)["entries"])
+    _assign_ids(entries, str(record.get("id") or ""))
+    return entries
 
 
 def file_records(records: list[dict], llm=None) -> dict[str, list[dict]]:
     ordered: list[dict] = []
     for record in records:
-        entry = file_record(record, llm=llm)
-        parsed = parse_llm_input(str(record.get("llm_input") or ""))
-        if entry["store"] == "general" and _is_reading(parsed.sentences):
-            entry["_reading"] = True
-            entry["_sentences"] = parsed.sentences
-        ordered.append(entry)
+        day = record_day(record)
+        for entry in file_window(record, llm=llm):
+            if day:
+                entry["day"] = day
+            ordered.append(entry)
     ordered = _collapse_reading(ordered)
     ordered = _collapse_episodes(ordered)
     general = [entry for entry in ordered if entry["store"] != "key"]
@@ -179,7 +271,8 @@ def _collapse_reading(entries: list[dict]) -> list[dict]:
         group.clear()
 
     for entry in entries:
-        if entry.get("_reading") and _same_reading_scene(group, entry):
+        joins = entry.get("_reading") or (entry.get("_with_reading") and group)
+        if joins and _same_reading_scene(group, entry):
             group.append(entry)
             continue
         flush()
@@ -198,9 +291,14 @@ def _same_reading_scene(group: list[dict], entry: dict) -> bool:
     previous = group[-1]
     if previous.get("location") != entry.get("location"):
         return False
-    previous_end = float(previous.get("time_frame", {}).get("end_sec", 0))
-    start = float(entry.get("time_frame", {}).get("start_sec", 0))
-    return -0.05 <= start - previous_end <= 1.0
+    previous_frame = previous.get("time_frame") or {}
+    frame = entry.get("time_frame") or {}
+    previous_end = float(previous_frame.get("end_sec", 0))
+    start = float(frame.get("start_sec", 0))
+    same_span = abs(start - float(previous_frame.get("start_sec", 0))) <= 0.05 and abs(
+        float(frame.get("end_sec", 0)) - previous_end
+    ) <= 0.05
+    return same_span or -0.05 <= start - previous_end <= 1.0
 
 
 def _merge_reading(group: list[dict]) -> dict:
@@ -213,6 +311,9 @@ def _merge_reading(group: list[dict]) -> dict:
     statement = f"You read {name}." if name else "You read a book."
     merged = {
         "id": first["id"],
+        "window_id": first.get("window_id"),
+        "window_ids": _window_ids(group),
+        "day": first.get("day"),
         "camera_id": first["camera_id"],
         "location": first["location"],
         "window": {"start_sec": frame["start_sec"], "end_sec": frame["end_sec"]},
@@ -249,9 +350,9 @@ def _page_turn_only(sentences: list[str]) -> bool:
 
 
 def _collapse_episodes(entries: list[dict]) -> list[dict]:
-    """One tea-making run, including switching the kettle off, is one memory.
+    """A reading run, including sitting down and a sip, is one memory.
 
-    One reading run, including sitting down and a sip, is one memory.
+    Tea steps stay separate. A kettle switching on or off is its own key entry.
     """
 
     collapsed: list[dict] = []
@@ -263,9 +364,7 @@ def _collapse_episodes(entries: list[dict]) -> list[dict]:
                 continue
             chunk = place[start:index]
             kind = labels[start]
-            if len(chunk) > 1 and kind == "tea":
-                collapsed.extend(_tea_steps(chunk))
-            elif len(chunk) > 1 and kind == "reading":
+            if len(chunk) > 1 and kind == "reading":
                 collapsed.append(_merge_episode_reading(chunk))
             else:
                 collapsed.extend(chunk)
@@ -300,24 +399,6 @@ def _same_action(previous: dict, entry: dict) -> bool:
     previous_end = float((previous.get("time_frame") or previous.get("window") or {}).get("end_sec") or 0)
     start = float((entry.get("time_frame") or entry.get("window") or {}).get("start_sec") or 0)
     return -0.05 <= start - previous_end <= 1.0
-
-
-def _tea_steps(group: list[dict]) -> list[dict]:
-    switched_off = any(_kettle_switched(entry, "off") for entry in group)
-    switched_on = any(_kettle_switched(entry, "on") for entry in group)
-    steps = [entry for entry in group if not _kettle_switched(entry, "off") and not _kettle_switched(entry, "on")]
-    if not switched_off and not switched_on:
-        return steps
-    statement = (
-        "You made a cup of tea and switched off the kettle."
-        if switched_off
-        else "You made a cup of tea and switched on the kettle."
-    )
-    summary = _merge_span(group, statement)
-    summary["store"] = "key"
-    summary["key_reason"] = "appliance on or off"
-    summary["importance"] = IMPORTANCE["appliance on or off"]
-    return [*steps, summary]
 
 
 def _place_groups(entries: list[dict]) -> list[list[dict]]:
@@ -359,32 +440,6 @@ def _absorb_settling(labels: list[str]) -> list[str]:
     return absorbed
 
 
-def _merge_tea(group: list[dict]) -> dict:
-    switched_off = any(_kettle_switched(entry, "off") for entry in group)
-    switched_on = any(_kettle_switched(entry, "on") for entry in group)
-    if switched_off:
-        statement = "You made a cup of tea and switched off the kettle."
-    elif switched_on:
-        statement = "You made a cup of tea and switched on the kettle."
-    else:
-        statement = "You made a cup of tea."
-    merged = _merge_span(group, statement)
-    if switched_off or switched_on:
-        merged["store"] = "key"
-        merged["key_reason"] = "appliance on or off"
-        merged["importance"] = IMPORTANCE["appliance on or off"]
-    return merged
-
-
-def _kettle_switched(entry: dict, state: str) -> bool:
-    text = str(entry.get("statement") or "")
-    if entry.get("key_reason") != "appliance on or off" and not re.search(r"\bkettle\b", text, re.IGNORECASE):
-        return False
-    if state == "off":
-        return re.search(r"\b(off|switched off|turned off|clicks off)\b", text, re.IGNORECASE) is not None
-    return re.search(r"\b(turned|switched|clicks|is|was)\s+on\b", text, re.IGNORECASE) is not None
-
-
 def _merge_episode_reading(group: list[dict]) -> dict:
     name = None
     for entry in group:
@@ -405,6 +460,9 @@ def _merge_span(group: list[dict], statement: str) -> dict:
     frame = _span_frame(group)
     return {
         "id": first.get("id") or "",
+        "window_id": first.get("window_id"),
+        "window_ids": _window_ids(group),
+        "day": first.get("day"),
         "camera_id": first.get("camera_id") or "",
         "location": first.get("location") or "",
         "window": {"start_sec": frame["start_sec"], "end_sec": frame["end_sec"]},
@@ -444,7 +502,18 @@ def _span_frame(group: list[dict]) -> dict:
 
 def _drop_private(entry: dict) -> None:
     entry.pop("_reading", None)
+    entry.pop("_with_reading", None)
     entry.pop("_sentences", None)
+
+
+def _window_ids(group: list[dict]) -> list[str]:
+    found: list[str] = []
+    for entry in group:
+        raw = entry.get("window_ids") or [entry.get("window_id")]
+        for window_id in raw:
+            if window_id and window_id not in found:
+                found.append(window_id)
+    return found
 
 
 def _union_objects(group: list[dict]) -> list[dict]:
@@ -486,17 +555,28 @@ def last_seen_from(key_entries: list[dict]) -> list[dict]:
     return [latest[label] for label in sorted(latest)]
 
 
-_MEMORY_LINE = re.compile(r"^(\d+):(\d{2})–(\d+):(\d{2})  (.*)$")
+_DAY = re.compile(r"^(\d{4}-\d{2}-\d{2})")
+_MEMORY_LINE = re.compile(r"^(\d{4}-\d{2}-\d{2})  (.*)$")
+
+
+def record_day(record: dict) -> str | None:
+    """Calendar day for a pipeline record, as YYYY-MM-DD."""
+
+    for key in ("day", "date", "recorded_at"):
+        value = record.get(key)
+        if isinstance(value, str):
+            match = _DAY.match(value.strip())
+            if match:
+                return match.group(1)
+    return None
 
 
 def memory_line(entry: dict) -> str:
     """The one line a person or an agent reads for this memory."""
 
-    frame = entry.get("time_frame") or entry.get("window") or {}
-    start = _stamp(float(frame.get("start_sec") or 0))
-    end = _stamp(float(frame.get("end_sec") or 0))
+    day = str(entry.get("day") or "undated")
     sentence = str(entry.get("statement") or "").strip()
-    return f"{start}–{end}  {sentence}".rstrip()
+    return f"{day}  {sentence}".rstrip()
 
 
 def render_memory(entries: list[dict]) -> str:
@@ -519,34 +599,47 @@ def read_memory(path: Path) -> list[dict]:
         match = _MEMORY_LINE.match(line)
         if not match:
             continue
-        start = int(match.group(1)) * 60 + int(match.group(2))
-        end = int(match.group(3)) * 60 + int(match.group(4))
         rows.append(
             {
                 "text": line,
-                "start_sec": start,
-                "end_sec": end,
-                "statement": match.group(5),
+                "day": match.group(1),
+                "statement": match.group(2),
             }
         )
     return rows
 
 
-def _stamp(seconds: float) -> str:
-    total = int(round(seconds))
-    return f"{total // 60}:{total % 60:02d}"
+def write_stores(filed: dict[str, list[dict]], directory: Path, day: str | None = None) -> list[Path]:
+    """Write one folder per calendar day: text to read, JSON to cross-check."""
 
-
-def write_stores(filed: dict[str, list[dict]], directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
-    _write_jsonl(directory / "general-memory.jsonl", [_with_text(entry) for entry in filed["general"]])
-    _write_jsonl(directory / "key-memory.jsonl", [_with_text(entry) for entry in filed["key"]])
+    entries = list(filed.get("entries") or [*filed["general"], *filed["key"]])
+    buckets: dict[str, list[dict]] = {}
+    for entry in entries:
+        day_name = str(entry.get("day") or day or "undated")
+        entry["day"] = day_name
+        buckets.setdefault(day_name, []).append(entry)
+    written: list[Path] = []
+    for day_name in sorted(buckets):
+        subset = buckets[day_name]
+        general = [entry for entry in subset if entry.get("store") != "key"]
+        key = [entry for entry in subset if entry.get("store") == "key"]
+        target = directory / day_name
+        _write_day(target, general, key, last_seen_from(key))
+        written.append(target)
+    return written
+
+
+def _write_day(directory: Path, general: list[dict], key: list[dict], last_seen: list[dict]) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    _write_json(directory / "general_memory.json", [_with_text(entry) for entry in general])
+    _write_json(directory / "key_moments.json", [_with_text(entry) for entry in key])
     (directory / "last-seen.json").write_text(
-        json.dumps({"objects": filed["last_seen"]}, indent=2) + "\n",
+        json.dumps({"objects": last_seen}, indent=2) + "\n",
         encoding="utf-8",
     )
-    (directory / "general_memory.txt").write_text(render_memory(filed["general"]), encoding="utf-8")
-    (directory / "key_moments.txt").write_text(render_memory(filed["key"]), encoding="utf-8")
+    (directory / "general_memory.txt").write_text(render_memory(general), encoding="utf-8")
+    (directory / "key_moments.txt").write_text(render_memory(key), encoding="utf-8")
 
 
 def load_records(path: Path) -> list[dict]:
@@ -559,22 +652,90 @@ def load_records(path: Path) -> list[dict]:
     return [json.loads(line) for line in raw.splitlines() if line.strip()]
 
 
-def _from_rules(record: dict, parsed: LlmInput) -> dict:
-    reason = _key_reason(parsed.sentences)
-    names = _other_names(parsed.sentences)
-    quotes = _speech_quotes(parsed.sentences)
+def _from_rules_many(record: dict, parsed: LlmInput) -> list[dict]:
+    slices = _event_slices(parsed.sentences)
+    return [_entry_for(record, parsed, sentences, reason) for sentences, reason in slices]
+
+
+def _event_slices(sentences: list[str]) -> list[tuple[list[str], str | None]]:
+    slices: list[tuple[list[str], str | None]] = []
+    for sentence in sentences:
+        reasons = _reasons_in(sentence)
+        if reasons:
+            for reason in reasons:
+                slices.append(([sentence], reason))
+            continue
+        if not _is_detail(sentence):
+            slices.append(([sentence], None))
+    if not slices and sentences:
+        slices.append((list(sentences), _key_reason(sentences)))
+    return slices
+
+
+def _reasons_in(sentence: str) -> list[str]:
+    """Distinct key events in one sentence, in the order they appear."""
+
+    found: list[tuple[int, str]] = []
+
+    def add(reason: str, match: re.Match | None) -> None:
+        if match is not None:
+            found.append((match.start(), reason))
+
+    if _kettle_switch_on(sentence) or (_APPLIANCE.search(sentence) and _APPLIANCE_STATE.search(sentence)):
+        add("appliance on or off", _APPLIANCE.search(sentence) or re.search(r"\bswitch\b", sentence, re.IGNORECASE))
+    if _placement(sentence):
+        add("object put down or picked up", _TRACKED.search(sentence))
+    if _locked(sentence):
+        add("door locked", _LOCK.search(sentence))
+    elif _door(sentence):
+        add("front door", _DOOR.search(sentence))
+    if _UNUSUAL.search(sentence):
+        add("unusual event", _UNUSUAL.search(sentence))
+    if _is_reading([sentence]) and not _page_turn_only([sentence]):
+        add("reading", re.search(r"\b(read|reads|reading|book)\b", sentence, re.IGNORECASE))
+    if _visitor([sentence]) and not found:
+        visible = _QUOTE.sub(" ", sentence)
+        add("visitor or conversation", _NAME.search(visible) or _SPEECH.search(sentence) or _QUOTE.search(sentence))
+    found.sort(key=lambda item: item[0])
+    reasons: list[str] = []
+    for _, reason in found:
+        if reason not in reasons:
+            reasons.append(reason)
+    return reasons
+
+
+def _kettle_switch_on(sentence: str) -> bool:
+    return re.search(r"\bkettle\b", sentence, re.IGNORECASE) is not None and _KETTLE_SWITCH.search(sentence) is not None
+
+
+def _is_detail(sentence: str) -> bool:
+    """A pose or an object just sitting there is not its own event."""
+
+    if _reasons_in(sentence):
+        return False
+    if _ACTION.search(sentence) and not _DETAIL.search(sentence):
+        return False
+    return True
+
+
+def _entry_for(record: dict, parsed: LlmInput, sentences: list[str], reason: str | None) -> dict:
+    names = _other_names(sentences)
+    quotes = _speech_quotes(sentences)
     location = str(record.get("location") or parsed.location or "")
-    statement = _statement(parsed.sentences, location, reason, names, quotes)
+    statement = _statement(sentences, location, reason, names, quotes)
     actors = list(names)
     if not actors:
-        actors = _attribute_actors(parsed.sentences)
+        actors = _attribute_actors(sentences)
     window = record.get("window") or {}
     start = window.get("start_sec", parsed.start_sec if parsed.start_sec is not None else 0.0)
     end = window.get("end_sec", parsed.end_sec if parsed.end_sec is not None else 0.0)
-    importance = IMPORTANCE[reason] if reason else _routine_importance(parsed.sentences)
+    importance = IMPORTANCE[reason] if reason else _routine_importance(sentences)
     frame = _time_frame(record, start, end)
-    return {
+    focused = replace(parsed, sentences=list(sentences))
+    entry = {
         "id": record.get("id") or "",
+        "window_id": record.get("id") or "",
+        "window_ids": [record.get("id") or ""],
         "camera_id": record.get("camera_id") or parsed.camera_id,
         "location": location,
         "window": {"start_sec": frame["start_sec"], "end_sec": frame["end_sec"]},
@@ -583,19 +744,72 @@ def _from_rules(record: dict, parsed: LlmInput) -> dict:
         "key_reason": reason,
         "statement": statement,
         "actors": actors,
-        "objects": _objects_for(parsed, reason),
-        "appointment": _appointment(parsed.sentences),
+        "objects": _objects_for(focused, reason),
+        "appointment": _appointment(sentences),
         "importance": importance,
+        "_sentences": list(sentences),
     }
+    blob = " ".join(sentences)
+    if _is_reading(sentences) or _page_turn_only(sentences):
+        entry["_reading"] = True
+    elif re.search(r"\bsip\b", blob, re.IGNORECASE) and re.search(r"\bbook\b", blob, re.IGNORECASE):
+        entry["_with_reading"] = True
+    return entry
 
 
-def _apply_wording(entry: dict, proposed: dict, parsed: LlmInput) -> None:
-    source = " ".join(parsed.sentences)
+def _assign_ids(entries: list[dict], window_id: str) -> None:
+    if len(entries) == 1:
+        entries[0]["id"] = window_id
+        entries[0]["window_id"] = window_id
+        entries[0]["window_ids"] = [window_id]
+        return
+    for index, entry in enumerate(entries, start=1):
+        entry["id"] = f"{window_id}#{index}"
+        entry["window_id"] = window_id
+        entry["window_ids"] = [window_id]
+
+
+def _apply_proposals(entries: list[dict], proposals: list[dict]) -> None:
+    if not proposals:
+        return
+    used: set[int] = set()
+    for entry in entries:
+        best = None
+        best_score = -1
+        for index, proposal in enumerate(proposals):
+            if index in used:
+                continue
+            score = _proposal_score(entry, proposal)
+            if score > best_score:
+                best = index
+                best_score = score
+        if best is None:
+            continue
+        if best_score <= 0 and not (len(entries) == 1 and len(proposals) == 1):
+            continue
+        used.add(best)
+        _apply_wording(entry, proposals[best])
+
+
+def _proposal_score(entry: dict, proposal: dict) -> int:
+    source = " ".join(entry.get("_sentences") or [])
+    statement = _translate_places(str(proposal.get("statement") or ""))
+    score = len(_content_words(statement) & _content_words(source))
+    reason = proposal.get("key_reason")
+    if reason and reason == entry.get("key_reason"):
+        score += 3
+    return score
+
+
+def _apply_wording(entry: dict, proposed: dict) -> None:
+    source = " ".join(entry.get("_sentences") or [])
     words = _content_words(source)
-    statement = str(proposed.get("statement") or "").strip()
+    statement = _translate_places(str(proposed.get("statement") or "").strip())
+    if _RAW_PLACE.search(statement):
+        statement = ""
     statement_words = _content_words(statement)
     if _statement_supported(statement, statement_words, source, words, entry["statement"]):
-        entry["statement"] = statement
+        entry["statement"] = _with_place(statement, str(entry.get("location") or ""))
     actors = []
     for actor in proposed.get("actors") or []:
         if not isinstance(actor, str):
@@ -665,7 +879,7 @@ def _statement_supported(
         if name.lower() not in source_text:
             return False
     if _APPLIANCE.search(statement) and _APPLIANCE_STATE.search(statement):
-        if not (_APPLIANCE.search(source) and _APPLIANCE_STATE.search(source)):
+        if not _source_has_appliance_state(source):
             return False
     if statement_words <= words or statement_words <= words | _content_words(rules_statement):
         return True
@@ -724,7 +938,7 @@ def _person_context(sentence: str) -> bool:
     if _SPEECH.search(sentence) or _QUOTE.search(sentence):
         return True
     return re.search(
-        r"\b(on the step|at the door|in the doorway|a visitor|someone else)\b",
+        r"\b(on the step|at the door|in the doorway|front door|a visitor|someone else|knocks|knocked)\b",
         sentence,
         re.IGNORECASE,
     ) is not None
@@ -769,6 +983,56 @@ def _appointment(sentences: list[str]) -> str | None:
     return f"{label[:1].upper()}{label[1:]}, {when_text}"
 
 
+def _plain_place(location: str) -> str:
+    text = " ".join(location.strip().split())
+    if not text:
+        return ""
+    key = text.lower()
+    if key in _PLACE_WORDS:
+        return _PLACE_WORDS[key]
+    underscored = key.replace(" ", "_")
+    if underscored in _PLACE_WORDS:
+        return _PLACE_WORDS[underscored]
+    if underscored.startswith("home_"):
+        rest = underscored[len("home_"):].replace("_", " ")
+        return f"the {rest}" if rest else ""
+    return ""
+
+
+def _with_place(statement: str, location: str) -> str:
+    phrase = _plain_place(location)
+    if not phrase:
+        return statement
+    if phrase.lower() in statement.lower():
+        return statement
+    bare = phrase[4:] if phrase.lower().startswith("the ") else phrase
+    if re.search(rf"\b{re.escape(bare)}\b", statement, re.IGNORECASE):
+        return statement
+    body = statement.rstrip()
+    if body.endswith("."):
+        body = body[:-1]
+    return f"{body} in {phrase}."
+
+
+def _translate_places(statement: str) -> str:
+    for token, phrase in _PLACE_WORDS.items():
+        if " " in token:
+            continue
+        statement = re.sub(rf"\b{re.escape(token)}\b", phrase, statement, flags=re.IGNORECASE)
+    return statement
+
+
+def _in_place(location: str) -> str:
+    phrase = _plain_place(location)
+    return f" in {phrase}" if phrase else ""
+
+
+def _source_has_appliance_state(source: str) -> bool:
+    if _kettle_switch_on(source):
+        return True
+    return _APPLIANCE.search(source) is not None and _APPLIANCE_STATE.search(source) is not None
+
+
 def _statement(
     sentences: list[str],
     location: str,
@@ -776,20 +1040,24 @@ def _statement(
     names: list[str],
     quotes: list[str],
 ) -> str:
-    place = f" in the {location}" if location else ""
+    place = _in_place(location)
     if names and quotes:
         return f"{names[0]} said \"{quotes[0]}\"."
     if names:
         where = f" at the {location}" if "door" in location.lower() else place
         return f"{names[0]} was{where}."
+    if reason == "reading":
+        name = _book_name(sentences)
+        return _with_place(f"You read {name}." if name else "You read a book.", location)
     if reason == "appliance on or off":
-        state = "off" if any(re.search(r"\boff\b", sentence, re.IGNORECASE) for sentence in sentences) else "on"
+        blob = " ".join(sentences)
+        if _kettle_switch_on(blob):
+            return f"You switched the kettle on{place}."
+        state = "off" if re.search(r"\boff\b", blob, re.IGNORECASE) else "on"
         name = "stove"
-        for sentence in sentences:
-            match = _APPLIANCE.search(sentence)
-            if match:
-                name = "stove" if match.group(1).lower() == "ring" else match.group(1).lower()
-                break
+        match = _APPLIANCE.search(blob)
+        if match:
+            name = "stove" if match.group(1).lower() == "ring" else match.group(1).lower()
         return f"The {name} is {state}{place}."
     if reason == "object put down or picked up":
         label = _placed_label(sentences) or "it"
@@ -807,16 +1075,19 @@ def _statement(
             return "You left home."
         return "You opened the front door."
     if reason == "unusual event":
-        return _first_sentence(sentences)
+        return _with_place(_first_sentence(sentences), location)
     if any(re.search(r"\b(cat|biscuit)\b", sentence, re.IGNORECASE) for sentence in sentences):
-        return "You fed the cat."
-    if any(re.search(r"\b(tea|kettle)\b", sentence, re.IGNORECASE) for sentence in sentences):
-        if not any(re.search(r"\bbook\b", sentence, re.IGNORECASE) for sentence in sentences):
-            return f"You made a cup of tea{place}."
-    if _MOVE.search(" ".join(sentences)):
-        return f"You walked into the {location}." if location else "You walked into another room."
+        return _with_place("You fed the cat.", location)
+    if _MOVE.search(" ".join(sentences)) and not any(
+        re.search(r"\b(kettle|fill|fills|filled|pour|pours|pick|picks|set|sets)\b", sentence, re.IGNORECASE)
+        for sentence in sentences
+    ):
+        phrase = _plain_place(location)
+        if phrase:
+            return f"You walked into {phrase}."
+        return "You walked into another room."
     if sentences:
-        return _as_you(_first_sentence(sentences))
+        return _with_place(_as_you(_first_sentence(sentences)), location)
     return "You were home."
 
 
@@ -881,10 +1152,20 @@ def _first_sentence(sentences: list[str]) -> str:
 
 
 def _as_you(sentence: str) -> str:
-    text = re.sub(r"^(Her hands|Her hand|She|Margaret)\b", "You", sentence, count=1, flags=re.IGNORECASE)
-    if text == sentence and not text.lower().startswith("you"):
-        return sentence
-    return text[:1].upper() + text[1:]
+    text = re.sub(
+        r"^(Her (?:left |right )?hands?|Her finger|She|Margaret|The woman|A woman)\b",
+        "You",
+        sentence.strip(),
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    match = re.match(r"^You\s+(\w+)(.*)$", text, flags=re.IGNORECASE)
+    if match:
+        verb = _PAST.get(match.group(1).lower(), match.group(1))
+        text = f"You {verb}{match.group(2)}"
+    if text and text[-1] not in ".!?":
+        text += "."
+    return text
 
 
 def _content_words(text: str) -> set[str]:
@@ -916,6 +1197,5 @@ def _with_text(entry: dict) -> dict:
     return stored
 
 
-def _write_jsonl(path: Path, rows: list[dict]) -> None:
-    body = "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
-    path.write_text(body, encoding="utf-8")
+def _write_json(path: Path, rows: list[dict]) -> None:
+    path.write_text(json.dumps(rows, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

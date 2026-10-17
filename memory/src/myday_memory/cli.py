@@ -3,11 +3,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
 from myday_memory.file_memory import file_records, load_records, write_stores
 from myday_memory.llm import WandbMemoryModel, WandbStructurer
 from myday_memory.store import build_store, load_chunks
+
+# Real filings land here. Test runs pass -o to a temporary directory.
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_MEMORY_DIR = REPO_ROOT / "data" / "memory"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -19,7 +24,12 @@ def main(argv: list[str] | None = None) -> int:
 
     file_cmd = sub.add_parser("file", help="read pipeline JSONL and file each llm_input")
     file_cmd.add_argument("records", type=Path, help="JSONL from pipeline/video_to_text.py, or a JSON list")
-    file_cmd.add_argument("-o", "--out", type=Path, default=Path("memory-files"))
+    file_cmd.add_argument("-o", "--out", type=Path, default=DEFAULT_MEMORY_DIR)
+    file_cmd.add_argument(
+        "--day",
+        default=None,
+        help="calendar day YYYY-MM-DD when the records do not carry one",
+    )
     file_cmd.add_argument(
         "--rules",
         action="store_true",
@@ -36,13 +46,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "file":
         model = None if args.rules else WandbMemoryModel()
         filed = file_records(load_records(args.records), llm=model)
-        write_stores(filed, args.out)
-        general = (args.out / "general_memory.txt").read_text(encoding="utf-8")
-        key = (args.out / "key_moments.txt").read_text(encoding="utf-8")
-        sys.stdout.write(general)
-        if general and key:
-            sys.stdout.write("\n")
-        sys.stdout.write(key)
+        written = write_stores(filed, args.out, day=args.day or date.today().isoformat())
+        for index, directory in enumerate(written):
+            if index:
+                sys.stdout.write("\n")
+            general = (directory / "general_memory.txt").read_text(encoding="utf-8")
+            key = (directory / "key_moments.txt").read_text(encoding="utf-8")
+            sys.stdout.write(general)
+            if general and key:
+                sys.stdout.write("\n")
+            sys.stdout.write(key)
         return 0
 
     chunks = load_chunks(args.chunks)

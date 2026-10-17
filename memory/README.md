@@ -1,25 +1,28 @@
 # Memory store
 
-Pipeline 4. `pipeline/video_to_text.py` writes `llm_input`. This stage reads only that text, asks W&B to phrase the memory, and files each window into one store.
+Pipeline 4. `pipeline/video_to_text.py` writes `llm_input`. This stage reads only that text, asks W&B to phrase the memory, and files each distinct event in the window. A routine step and a key event in the same window both stay. Two key events in one window stay two memories.
 
 The instruction sent to W&B is [`INSTRUCTION.md`](INSTRUCTION.md).
 
 ```bash
 cd memory
-PYTHONPATH=src python -m myday_memory.cli file examples/home-windows.jsonl -o memory-files
+PYTHONPATH=src python -m myday_memory.cli file path/to/real.jsonl
 ```
 
-That writes:
+A real run writes to `data/memory/` at the repo root, one folder per day. The folder name is the day, `2026-10-17`. A record can carry that day in `day`, `date`, or `recorded_at`. Otherwise the command uses `--day`, or today's date. Pass `-o` to send a test run somewhere else, such as `/tmp`.
 
-- `general_memory.txt` — routine memories a person or an agent reads: one line each, a timestamp and the sentence
+Each day folder contains:
+
+- `general_memory.txt` — routine memories, one line each: `2026-10-17  You filled the kettle at the sink in the kitchen.`
 - `key_moments.txt` — the key memories in that same text form
-- `general-memory.jsonl` — routine moments, one JSON object per window
-- `key-memory.jsonl` — visitors, appliance on/off, objects put down or picked up, the front door (including locking and unlocking), and anything unusual
+- `general_memory.json` and `key_moments.json` — the same lines, plus the video span for cross-checking
 - `last-seen.json` — the latest place a tracked object was put down, taken from the key file
 
-Each object uses `"store": "general"` or `"store": "key"`. `id`, `camera_id`, `location`, and `window` are copied from the pipeline record. `time_frame` and `video` keep the same span (`start_sec`, `end_sec`, camera, and the segment `source` when the record has one), so a text line can be checked against the clip. The model cannot change that. Pass `--rules` to file from the text without calling W&B.
+Each object uses `"store": "general"` or `"store": "key"`. `camera_id`, `location`, and `window` are copied from the pipeline record. `time_frame` and `video` keep the same span (`start_sec`, `end_sec`, camera, and the segment `source` when the record has one), so a text line can be checked against the clip. The model cannot change that. When a window files more than one event, the ids are `ann_h009#1` and `ann_h009#2`. `window_id` stays the pipeline id. Pass `--rules` to file from the text without calling W&B.
 
-A run of reading windows (pick up a book, then turn pages, including a sip in the middle) is one key memory, "You read [the book]", and `time_frame` covers the whole run. One page turn stays one general window. A run of making tea that includes switching the kettle off is one key memory: "You made a cup of tea and switched off the kettle." `examples/home-windows.jsonl` is a few made-up home windows in the pipeline's format. The 100 archive records in `library/example-descriptions/` are format examples only. Do not file them.
+A statement names the step in that window, in plain place words: `home_kitchen` is "the kitchen". A raw location token never appears in a sentence. "You made a cup of tea" is not a window statement. Switching the kettle on or off is its own key memory. Consecutive windows with the same sentence share one span.
+
+A run of reading (pick up a book, then turn pages, including a sip in the middle) is one key memory, "You read [the book]", and `time_frame` covers the whole run. One page turn stays one general window. `examples/home-windows.jsonl` is a few made-up home windows in the pipeline's format. The 100 archive records in `library/example-descriptions/` are format examples only. Do not file them.
 
 ## Older caption draft
 
